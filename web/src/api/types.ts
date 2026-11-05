@@ -1,5 +1,6 @@
 export type ViewMode = 'editor' | 'split' | 'preview';
 export type ThemeMode = 'system' | 'light' | 'dark';
+export type NoteSort = 'modified' | 'created' | 'title';
 
 export interface Project {
   id: string;
@@ -21,6 +22,7 @@ export interface NoteSummary {
   createdAt: string;
   size: number;
   isUntitled: boolean;
+  pinned: boolean;
 }
 
 export interface Note extends NoteSummary {
@@ -63,6 +65,58 @@ export interface Asset {
   name: string;
   size: number;
   kind: string;
+}
+
+export interface LinkTarget {
+  title: string;
+  noteId: string;
+  projectName: string;
+  path: string;
+}
+
+export interface UnresolvedLink {
+  title: string;
+  count: number;
+}
+
+export interface LinkIndex {
+  targets: LinkTarget[];
+  unresolved: UnresolvedLink[];
+}
+
+export interface Backlink {
+  noteId: string;
+  title: string;
+  projectName: string;
+  line: number;
+  excerpt: string;
+}
+
+export interface SearchHit {
+  id: string;
+  title: string;
+  projectId: string;
+  projectName: string;
+  snippet: string;
+  modifiedAt: string;
+  size: number;
+  isUntitled: boolean;
+}
+
+export interface NoteVersion {
+  id: string;
+  createdAt: string;
+  size: number;
+  etag: string;
+  isCurrent: boolean;
+}
+
+export interface NoteVersionDetail {
+  id: string;
+  content: string;
+  createdAt: string;
+  size: number;
+  etag: string;
 }
 
 export interface VaultInfo {

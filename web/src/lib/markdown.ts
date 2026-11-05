@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import MarkdownIt from 'markdown-it';
+import type { StateInline } from 'markdown-it';
 import { assetUrl } from '../api/client';
 import { isAudioPath } from './utils';
 
@@ -53,6 +54,47 @@ md.renderer.rules.link_open = (tokens, idx, options, _env, self) => {
     tokens[idx].attrSet('rel', 'noopener noreferrer nofollow');
   }
   return self.renderToken(tokens, idx, options);
+};
+
+// MiaoYan links notes by exact title inside [[double brackets]]. Alias and
+// heading syntax are intentionally not supported, matching the native parser.
+function wikilinkRule(state: StateInline, silent: boolean): boolean {
+  const start = state.pos;
+  if (state.src.charCodeAt(start) !== 0x5b || state.src.charCodeAt(start + 1) !== 0x5b) {
+    return false;
+  }
+
+  const end = state.src.indexOf(']]', start + 2);
+  if (end < 0) {
+    return false;
+  }
+
+  const inner = state.src.slice(start + 2, end);
+  const title = inner.trim();
+  if (!title || /[\[\]\r\n]/.test(inner)) {
+    return false;
+  }
+
+  if (!silent) {
+    const token = state.push('wikilink', '', 0);
+    token.content = title;
+    token.meta = { title };
+  }
+
+  state.pos = end + 2;
+  return true;
+}
+
+md.inline.ruler.before('link', 'wikilink', wikilinkRule);
+
+md.renderer.rules.wikilink = (tokens, idx, _options, env) => {
+  const title = tokens[idx].content;
+  const titles = env?.linkTitles as Set<string> | undefined;
+  const resolved = titles?.has(title.toLowerCase()) ?? true;
+  const escaped = md.utils.escapeHtml(title);
+  return `<a href="#" class="wikilink${resolved ? '' : ' wikilink-unresolved'}" data-wikilink="${escaped}" title="${
+    resolved ? `打开 ${escaped}` : `创建 ${escaped}`
+  }">${escaped}</a>`;
 };
 
 function stripFrontmatter(text: string): string {
@@ -113,11 +155,27 @@ md.core.ruler.after('inline', 'task-lists', (state) => {
   }
 });
 
-export function renderMarkdown(content: string, noteId: string): string {
-  const html = md.render(stripFrontmatter(content), { noteId });
+export function renderMarkdown(
+  content: string,
+  noteId: string,
+  linkTitles?: ReadonlySet<string>,
+): string {
+  const html = md.render(stripFrontmatter(content), {
+    noteId,
+    linkTitles: linkTitles ? new Set([...linkTitles].map((title) => title.toLowerCase())) : undefined,
+  });
   return DOMPurify.sanitize(html, {
     ADD_TAGS: ['audio'],
-    ADD_ATTR: ['target', 'rel', 'loading', 'decoding', 'controls', 'preload', 'aria-label'],
+    ADD_ATTR: [
+      'target',
+      'rel',
+      'loading',
+      'decoding',
+      'controls',
+      'preload',
+      'aria-label',
+      'data-wikilink',
+    ],
     FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick'],
   });

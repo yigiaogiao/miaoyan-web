@@ -4,7 +4,10 @@ import {
   AlertTriangle,
   Check,
   Columns2,
+  Copy,
   Eye,
+  History,
+  Link2,
   List,
   Loader2,
   Monitor,
@@ -13,12 +16,16 @@ import {
   PanelLeft,
   Pencil,
   PenLine,
+  Pin,
+  PinOff,
   RotateCcw,
   Sun,
   Trash2,
   UploadCloud,
+  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router';
 import { api, isConflictError } from '../api/client';
 import type { ConflictInfo, Note, ThemeMode, ViewMode } from '../api/types';
 import { formatRelativeTime, isMod } from '../lib/utils';
@@ -27,6 +34,7 @@ import { useUiStore } from '../store/ui';
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor';
 import { MarkdownPreview } from './MarkdownPreview';
 import { ConfirmDialog } from './Dialogs';
+import { VersionHistoryDialog } from './VersionHistoryDialog';
 
 interface Props {
   noteId: string;
@@ -34,6 +42,8 @@ interface Props {
   onViewMode: (mode: ViewMode) => void;
   onRename: (note: Note) => void;
   onDelete: (note: Note) => void;
+  onPin: (note: Note, pinned: boolean) => void;
+  onDuplicate: (note: Note) => void;
 }
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict';
@@ -51,8 +61,17 @@ function countWords(content: string): number {
   return cjk + latin;
 }
 
-export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }: Props) {
+export function EditorPane({
+  noteId,
+  viewMode,
+  onViewMode,
+  onRename,
+  onDelete,
+  onPin,
+  onDuplicate,
+}: Props) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const toast = useToastStore((state) => state.push);
   const theme = useUiStore((state) => state.theme);
   const setTheme = useUiStore((state) => state.setTheme);
@@ -61,11 +80,39 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
   const listOpen = useUiStore((state) => state.listOpen);
 
-  const { data: note, error, isLoading } = useQuery({
+  const { data: note, error, isLoading, refetch } = useQuery({
     queryKey: ['note', noteId],
     queryFn: () => api.note(noteId),
+    retry: false,
   });
 
+  const linksQuery = useQuery({
+    queryKey: ['links'],
+    queryFn: api.links,
+    staleTime: 5_000,
+  });
+
+  const backlinksQuery = useQuery({
+    queryKey: ['backlinks', noteId],
+    queryFn: () => api.backlinks(noteId),
+    enabled: Boolean(note),
+    retry: false,
+  });
+
+  const linkTargets = useMemo(
+    () =>
+      new Map(
+        (linksQuery.data?.targets ?? []).map((target) => [target.title.toLowerCase(), target]),
+      ),
+    [linksQuery.data],
+  );
+  const linkTitles = useMemo(
+    () => new Set((linksQuery.data?.targets ?? []).map((target) => target.title)),
+    [linksQuery.data],
+  );
+
+  const [showBacklinks, setShowBacklinks] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const [content, setContent] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [externalUpdate, setExternalUpdate] = useState(false);
@@ -163,6 +210,8 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
           current ? { ...current, ...result } : result,
         );
         void queryClient.invalidateQueries({ queryKey: ['notes'], exact: false });
+        void queryClient.invalidateQueries({ queryKey: ['links'] });
+        void queryClient.invalidateQueries({ queryKey: ['backlinks'] });
 
         if (pendingRef.current) {
           pendingRef.current = false;
@@ -297,6 +346,47 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
     }
   }, [conflict, saveNow]);
 
+  const openWikilink = useCallback(
+    async (title: string, unresolved: boolean) => {
+      if (!unresolved) {
+        const target = linkTargets.get(title.toLowerCase());
+        if (target) {
+          navigate(`/note/${target.noteId}`);
+          return;
+        }
+      }
+
+      const current = noteRef.current;
+      if (!current) {
+        return;
+      }
+
+      try {
+        const created = await api.createNote(current.projectId, title);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['notes'] }),
+          queryClient.invalidateQueries({ queryKey: ['projects'] }),
+          queryClient.invalidateQueries({ queryKey: ['links'] }),
+        ]);
+        toast(`已创建「${title}」`, 'success');
+        navigate(`/note/${created.id}`);
+      } catch (reason) {
+        toast(reason instanceof Error ? reason.message : '创建笔记失败', 'error');
+      }
+    },
+    [linkTargets, navigate, queryClient, toast],
+  );
+
+  const handleVersionRestored = useCallback(
+    (updated: Note) => {
+      adopt(updated);
+      void queryClient.invalidateQueries({ queryKey: ['notes'] });
+      void queryClient.invalidateQueries({ queryKey: ['links'] });
+      void queryClient.invalidateQueries({ queryKey: ['backlinks'] });
+    },
+    [adopt, queryClient],
+  );
+
   const words = useMemo(() => countWords(content), [content]);
 
   if (isLoading) {
@@ -315,6 +405,25 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
           <p className="text-sm text-[var(--text-muted)]">
             {error instanceof Error ? error.message : '笔记不存在或已被移动'}
           </p>
+          <p className="mt-1 text-xs text-[var(--text-faint)]">
+            文件可能已在磁盘上被改名或删除，链接的旧地址已经失效。
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="rounded-lg border border-[var(--border-strong)] px-3 py-1.5 text-xs hover:bg-[var(--accent-soft)]"
+            >
+              重试
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white"
+            >
+              返回笔记列表
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -329,7 +438,7 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
   }[saveState];
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col bg-[var(--surface)]">
+    <section className="relative flex h-full min-w-0 flex-1 flex-col bg-[var(--surface)]">
       <header className="flex h-[52px] shrink-0 items-center gap-1.5 border-b border-[var(--border)] px-3">
         {!sidebarOpen && (
           <button
@@ -422,6 +531,20 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
           </button>
         </div>
 
+        <button
+          type="button"
+          title="反向链接"
+          onClick={() => setShowBacklinks((value) => !value)}
+          className={`flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] ${
+            showBacklinks
+              ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
+              : 'text-[var(--text-muted)] hover:bg-[var(--accent-soft)]'
+          }`}
+        >
+          <Link2 size={15} />
+          <span className="tabular-nums">{backlinksQuery.data?.length ?? 0}</span>
+        </button>
+
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
@@ -476,6 +599,25 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
                 <Pencil size={13} /> 重命名
               </DropdownMenu.Item>
               <DropdownMenu.Item
+                onSelect={() => onPin(note, !note.pinned)}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
+              >
+                {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+                {note.pinned ? '取消置顶' : '置顶'}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={() => onDuplicate(note)}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
+              >
+                <Copy size={13} /> 创建副本
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={() => setVersionsOpen(true)}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
+              >
+                <History size={13} /> 版本历史
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
                 onSelect={() => {
                   void navigator.clipboard
                     .writeText(contentRef.current)
@@ -511,6 +653,62 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
         </div>
       )}
 
+      {showBacklinks && (
+        <div className="absolute right-3 top-[58px] z-30 flex max-h-[62%] w-[min(92vw,370px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] shadow-2xl">
+          <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2">
+            <Link2 size={13} className="text-[var(--accent)]" />
+            <span className="text-xs font-semibold">反向链接</span>
+            <span className="text-[11px] text-[var(--text-faint)]">
+              {backlinksQuery.data?.length ?? 0}
+            </span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              aria-label="关闭反向链接"
+              onClick={() => setShowBacklinks(false)}
+              className="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text)]"
+            >
+              <X size={13} />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+            {backlinksQuery.isLoading ? (
+              <div className="grid place-items-center py-8">
+                <Loader2 size={15} className="animate-spin text-[var(--text-faint)]" />
+              </div>
+            ) : (backlinksQuery.data?.length ?? 0) === 0 ? (
+              <p className="px-3 py-6 text-center text-xs leading-relaxed text-[var(--text-faint)]">
+                还没有笔记链接到「{note.title}」。
+                <br />
+                在别处输入 <code className="rounded bg-[var(--surface-sunken)] px-1">[[{note.title}]]</code> 即可。
+              </p>
+            ) : (
+              backlinksQuery.data!.map((backlink) => (
+                <button
+                  key={backlink.noteId}
+                  type="button"
+                  onClick={() => {
+                    setShowBacklinks(false);
+                    navigate(`/note/${backlink.noteId}`);
+                  }}
+                  className="mb-1 block w-full rounded-lg px-2.5 py-2 text-left hover:bg-[var(--surface-hover)]"
+                >
+                  <span className="flex items-center gap-1.5 text-xs font-medium">
+                    <span className="truncate">{backlink.title}</span>
+                    <span className="shrink-0 text-[10px] font-normal text-[var(--text-faint)]">
+                      {backlink.projectName} · 第 {backlink.line} 行
+                    </span>
+                  </span>
+                  <span className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-[var(--text-muted)]">
+                    {backlink.excerpt}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1">
         {viewMode !== 'preview' && (
           <div style={{ flex: viewMode === 'split' ? '1 1 50%' : '1 1 100%' }} className="min-w-0">
@@ -533,7 +731,12 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
             style={{ flex: viewMode === 'split' ? '1 1 50%' : '1 1 100%' }}
             className="min-w-0 bg-[var(--bg)]"
           >
-            <MarkdownPreview content={content} noteId={note.id} />
+            <MarkdownPreview
+              content={content}
+              noteId={note.id}
+              linkTitles={linkTitles}
+              onWikilink={(title, unresolved) => void openWikilink(title, unresolved)}
+            />
           </div>
         )}
       </div>
@@ -548,6 +751,15 @@ export function EditorPane({ noteId, viewMode, onViewMode, onRename, onDelete }:
           deletingRef.current = true;
           return onDelete(note);
         }}
+      />
+
+      <VersionHistoryDialog
+        noteId={note.id}
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+        currentContent={content}
+        currentEtag={etagRef.current ?? note.etag}
+        onRestored={handleVersionRestored}
       />
 
       <ConflictDialog

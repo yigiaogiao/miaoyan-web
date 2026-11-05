@@ -1,11 +1,16 @@
 import type {
   Asset,
+  Backlink,
   ChangeEvent,
   ConflictInfo,
+  LinkIndex,
   Note,
   NoteSummary,
+  NoteVersion,
+  NoteVersionDetail,
   Project,
   SaveNoteBody,
+  SearchHit,
   TrashEntry,
   TrashRestoreResult,
   VaultInfo,
@@ -102,8 +107,33 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ title, projectId }),
     }),
+  setPinned: (id: string, pinned: boolean) =>
+    request<Note>(`/api/notes/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title: null, projectId: null, pinned }),
+    }),
+  duplicateNote: (id: string) =>
+    request<Note>(`/api/notes/${encodeURIComponent(id)}/duplicate`, { method: 'POST' }),
   deleteNote: (id: string) =>
     request<void>(`/api/notes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  links: () => request<LinkIndex>('/api/links'),
+  backlinks: (id: string) =>
+    request<Backlink[]>(`/api/notes/${encodeURIComponent(id)}/backlinks`),
+  search: (q: string, projectId?: string, limit?: number) =>
+    request<SearchHit[]>(`/api/search${query({ q, project: projectId, limit: limit?.toString() })}`),
+
+  versions: (id: string) =>
+    request<NoteVersion[]>(`/api/notes/${encodeURIComponent(id)}/versions`),
+  version: (id: string, versionId: string) =>
+    request<NoteVersionDetail>(
+      `/api/notes/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`,
+    ),
+  restoreVersion: (id: string, versionId: string, etag: string | null) =>
+    request<Note>(
+      `/api/notes/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`,
+      { method: 'POST', body: JSON.stringify({ etag }) },
+    ),
 
   uploadAsset: (noteId: string, file: File) => {
     const form = new FormData();

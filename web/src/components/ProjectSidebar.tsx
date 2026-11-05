@@ -1,9 +1,11 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Feather, FolderPlus, Layers, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import type { Project } from '../api/types';
 import { useUiStore } from '../store/ui';
 import { ConfirmDialog, PromptDialog } from './Dialogs';
+
+const NOTE_DRAG_TYPE = 'application/x-miaoyan-note';
 
 interface Props {
   projects: Project[] | undefined;
@@ -11,6 +13,7 @@ interface Props {
   onDelete: (project: Project) => Promise<void>;
   onCreate: (name: string) => Promise<void>;
   onOpenTrash: () => void;
+  onMoveNote: (noteId: string, projectId: string) => void;
 }
 
 interface RowProps {
@@ -20,17 +23,52 @@ interface RowProps {
   active: boolean;
   icon: ReactNode;
   onSelect: () => void;
+  onDropNote?: (noteId: string) => void;
   actions?: ReactNode;
 }
 
-function Row({ name, count, active, icon, onSelect, actions }: RowProps) {
+function Row({ id, name, count, active, icon, onSelect, onDropNote, actions }: RowProps) {
+  const [dragOver, setDragOver] = useState(false);
+
+  function onDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!onDropNote || !event.dataTransfer.types.includes(NOTE_DRAG_TYPE)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDragOver(true);
+  }
+
+  function onDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setDragOver(false);
+    }
+  }
+
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    if (!onDropNote) {
+      return;
+    }
+    event.preventDefault();
+    setDragOver(false);
+    const noteId = event.dataTransfer.getData(NOTE_DRAG_TYPE);
+    if (noteId) {
+      onDropNote(noteId);
+    }
+  }
+
   return (
     <div
-      className={`group flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] ${
+      data-project-id={id}
+      onDragOver={onDragOver}
+      onDragEnter={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={`group flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-shadow ${
         active
           ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent-strong)]'
           : 'text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]'
-      }`}
+      } ${dragOver ? 'ring-2 ring-inset ring-[var(--accent)]' : ''}`}
     >
       <button
         type="button"
@@ -50,11 +88,25 @@ function Row({ name, count, active, icon, onSelect, actions }: RowProps) {
   );
 }
 
-export function ProjectSidebar({ projects, onRename, onDelete, onCreate, onOpenTrash }: Props) {
+export function ProjectSidebar({
+  projects,
+  onRename,
+  onDelete,
+  onCreate,
+  onOpenTrash,
+  onMoveNote,
+}: Props) {
   const selectedProjectId = useUiStore((state) => state.selectedProjectId);
   const setProject = useUiStore((state) => state.setProject);
+  const projectCreateRequest = useUiStore((state) => state.projectCreateRequest);
 
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (projectCreateRequest > 0) {
+      setCreating(true);
+    }
+  }, [projectCreateRequest]);
   const [renaming, setRenaming] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
 
@@ -101,6 +153,7 @@ export function ProjectSidebar({ projects, onRename, onDelete, onCreate, onOpenT
           active={selectedProjectId === 'root'}
           icon={<FolderPlus size={14} />}
           onSelect={() => setProject('root')}
+          onDropNote={(noteId) => onMoveNote(noteId, 'root')}
         />
 
         {(projects ?? [])
@@ -114,6 +167,7 @@ export function ProjectSidebar({ projects, onRename, onDelete, onCreate, onOpenT
               active={selectedProjectId === project.id}
               icon={<span className="block size-2.5 rounded-[3px] border border-current" />}
               onSelect={() => setProject(project.id)}
+              onDropNote={(noteId) => onMoveNote(noteId, project.id)}
               actions={
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>

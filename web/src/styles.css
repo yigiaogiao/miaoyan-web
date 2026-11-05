@@ -262,6 +262,26 @@ input,
   text-decoration-thickness: 2px;
 }
 
+.md-preview .wikilink {
+  border-radius: 3px;
+  padding: 0 0.1em;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+.md-preview .wikilink:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.md-preview .wikilink-unresolved {
+  background: transparent;
+  color: var(--text-faint);
+  text-decoration: underline dashed;
+  text-decoration-color: var(--border-strong);
+}
+
 .md-preview strong {
   font-weight: 650;
   color: var(--md-strong);

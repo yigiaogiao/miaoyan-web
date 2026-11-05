@@ -1,8 +1,21 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { FileText, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import {
+  ArrowUpDown,
+  Check,
+  Copy,
+  FileText,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { NoteSummary } from '../api/types';
+import type { NoteSort, NoteSummary } from '../api/types';
 import { formatRelativeTime } from '../lib/utils';
 import { ConfirmDialog, PromptDialog } from './Dialogs';
 
@@ -11,12 +24,22 @@ interface Props {
   loading: boolean;
   activeNoteId: string | null;
   search: string;
+  sort: NoteSort;
   onSearch: (value: string) => void;
+  onSort: (sort: NoteSort) => void;
   onOpen: (noteId: string) => void;
   onCreate: () => Promise<void>;
   onRename: (note: NoteSummary, title: string) => Promise<void>;
   onDelete: (note: NoteSummary) => Promise<void>;
+  onPin: (note: NoteSummary, pinned: boolean) => Promise<void>;
+  onDuplicate: (note: NoteSummary) => Promise<void>;
 }
+
+const SORT_ITEMS: { value: NoteSort; label: string }[] = [
+  { value: 'modified', label: '修改时间' },
+  { value: 'created', label: '创建时间' },
+  { value: 'title', label: '标题' },
+];
 
 const ROW_HEIGHT = 86;
 
@@ -25,11 +48,15 @@ export function NoteList({
   loading,
   activeNoteId,
   search,
+  sort,
   onSearch,
+  onSort,
   onOpen,
   onCreate,
   onRename,
   onDelete,
+  onPin,
+  onDuplicate,
 }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [renaming, setRenaming] = useState<NoteSummary | null>(null);
@@ -60,14 +87,47 @@ export function NoteList({
               {notes?.length ?? 0}
             </span>
           </h2>
-          <button
-            type="button"
-            title="新建笔记 (⌘N)"
-            onClick={() => void onCreate()}
-            className="grid size-7 place-items-center rounded-lg bg-[var(--accent)] text-white shadow-sm hover:brightness-105"
-          >
-            <Plus size={16} />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  type="button"
+                  title={`排序：${SORT_ITEMS.find((item) => item.value === sort)?.label}`}
+                  className="grid size-7 place-items-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
+                >
+                  <ArrowUpDown size={14} />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  align="end"
+                  sideOffset={4}
+                  className="z-50 min-w-36 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-1 text-[13px] shadow-xl"
+                >
+                  {SORT_ITEMS.map((item) => (
+                    <DropdownMenu.Item
+                      key={item.value}
+                      onSelect={() => onSort(item.value)}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
+                    >
+                      <span className="flex-1">{item.label}</span>
+                      {sort === item.value && (
+                        <Check size={13} className="text-[var(--accent)]" />
+                      )}
+                    </DropdownMenu.Item>
+                  ))}
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+            <button
+              type="button"
+              title="新建笔记 (⌘N)"
+              onClick={() => void onCreate()}
+              className="grid size-7 place-items-center rounded-lg bg-[var(--accent)] text-white shadow-sm hover:brightness-105"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
         </div>
 
         <div className="relative">
@@ -127,6 +187,12 @@ export function NoteList({
                   <div
                     role="button"
                     tabIndex={0}
+                    draggable
+                    title="拖动到左侧项目可移动笔记"
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData('application/x-miaoyan-note', note.id);
+                      event.dataTransfer.effectAllowed = 'move';
+                    }}
                     onClick={() => onOpen(note.id)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
@@ -153,8 +219,11 @@ export function NoteList({
                         )}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13.5px] font-medium leading-5">
-                          {note.title}
+                        <div className="flex items-center gap-1 text-[13.5px] font-medium leading-5">
+                          {note.pinned && (
+                            <Pin size={11} className="shrink-0 text-[var(--accent)]" fill="currentColor" />
+                          )}
+                          <span className="truncate">{note.title}</span>
                         </div>
                         <p className="mt-0.5 line-clamp-2 text-[12px] leading-[1.5] text-[var(--text-muted)]">
                           {note.excerpt || '空白笔记'}
@@ -188,6 +257,19 @@ export function NoteList({
                           sideOffset={4}
                           className="z-50 min-w-36 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-1 text-[13px] shadow-xl"
                         >
+                          <DropdownMenu.Item
+                            onSelect={() => void onPin(note, !note.pinned)}
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
+                          >
+                            {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+                            {note.pinned ? '取消置顶' : '置顶'}
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            onSelect={() => void onDuplicate(note)}
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
+                          >
+                            <Copy size={13} /> 创建副本
+                          </DropdownMenu.Item>
                           <DropdownMenu.Item
                             onSelect={() => setRenaming(note)}
                             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
