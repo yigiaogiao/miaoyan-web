@@ -4,14 +4,19 @@
 
 笔记就是普通的 `.md` 文件，目录就是项目，数据始终在自己手里。本项目是独立实现，不修改妙言或 Papyra 的源码。
 
-> 当前状态：**M0 服务骨架**。三栏书库、编辑器等业务功能从 M1 开始，进度见 [PLAN.md](PLAN.md)，与妙言的功能对照见 [COMPATIBILITY.md](COMPATIBILITY.md)。
+> 当前状态：**M1 书库主线完成**。可以直接指向一份现有的妙言书库，浏览、编辑、保存和添加附件；wikilink、全文搜索、版本历史在 M2，数学/图表/PPT 在 M3。进度见 [PLAN.md](PLAN.md)，与妙言的功能对照见 [COMPATIBILITY.md](COMPATIBILITY.md)。
 
 ## 现在能做什么
 
+- 三栏书库：项目（顶层文件夹）、笔记列表、编辑器。笔记列表虚拟滚动，按项目过滤，支持标题/正文搜索。
+- 源码编辑 + 实时预览，编辑/分栏/预览三种模式；650 ms 防抖自动保存，⌘S 立即保存。
+- 新建（空标题自动使用大写 UUID 文件名，显示为 “Untitled Note”）、重命名、删除到应用内回收站并恢复。
+- 图片粘贴/拖拽上传到笔记旁的 `i/`，其他文件进入 `files/`；预览按笔记相对路径解析资源。
+- 外部修改通过文件监听 + SSE 实时刷新；本地未保存时以 412 冲突返回，备份到 `.miaoyan-conflicts/`，可选择载入磁盘版本或保留本地文本。
+- 亮色 / 暗色 / 跟随系统主题，移动端自动切换为单栏。
 - `GET /healthz`：返回版本、书库模式、SQLite/FTS5 能力、PlantUML/ffmpeg 等可选能力。
-- 单容器同时提供 SPA、API 与媒体文件（M1 起）。
+- 单容器同时提供 SPA、API 与媒体文件。
 - 懒猫按用户隔离：从 `X-HC-User-ID` 解析 `/lzcapp/documents/<uid>/MiaoYan`，一个容器可服务多位用户。
-- React 19 + TypeScript + Vite 前端骨架，Tailwind 4 主题变量，暗色跟随系统。
 - Dockerfile、docker-compose、懒猫 `package.yml` / `lzc-manifest.yml` / `lzc-build.yml` 与构建脚本。
 
 ## 技术栈

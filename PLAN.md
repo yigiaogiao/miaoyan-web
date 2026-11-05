@@ -1,8 +1,8 @@
 # MiaoYan Web — Implementation Plan
 
-> Status: M0 planning document. This file is the contract for the project; update it
-> when a decision changes, and keep `COMPATIBILITY.md` in sync with user-visible
-> behaviour.
+> Status: M1 complete (2026-11-05); M2 next. This file is the contract for the
+> project; update it when a decision changes, and keep `COMPATIBILITY.md` in sync
+> with user-visible behaviour.
 
 ## 1. Goal
 
@@ -438,7 +438,7 @@ while typing (block-level updates), image `loading=lazy`.
 
 ## 11. Milestones and acceptance
 
-### M0 — skeleton (this milestone)
+### M0 — skeleton — **done 2026-11-05**
 
 Deliverables: repo layout; ASP.NET Core 10 minimal API with `/healthz` and path
 resolver; React 19 + Vite + TS shell; Dockerfile; docker-compose; LazyCat
@@ -447,7 +447,7 @@ Acceptance: `dotnet build`, `npm run build`, server serves the SPA and
 `/healthz`; Dockerfile builds (where Docker is available); `lzc-cli` lints the
 manifest.
 
-### M1 — vault + three-pane editor
+### M1 — vault + three-pane editor — **done 2026-11-05**
 
 Scan/import, projects and notes CRUD, three-pane UI, CodeMirror, split preview,
 autosave, attachments, watcher/SSE, trash. Acceptance: import a real MiaoYan
@@ -455,6 +455,18 @@ folder; open/edit/save 1,000 notes; paste/drag an image and see it render;
 delete/restore a note; external edit refreshes the open note. **M2 gate per
 product owner: import + edit + attachment is the main line and must pass before
 PPT/API work.**
+
+Landed: filesystem scan preserving imported bytes; path-hash IDs; project and
+note CRUD; app trash with restore/purge; 650 ms autosave with ETag conflict
+(412 + `.miaoyan-conflicts/` backup); image/attachment upload to `i/` and
+`files/` with traversal checks; FileSystemWatcher + SSE; three-pane responsive
+UI; split/editor/preview; light/dark/system; note-list search (substring, FTS in
+M2). Verification: 11 integration tests; browser smoke of the import → edit →
+attachment → delete → restore → external-edit → conflict flow. A 1,003-note library scans in
+~25 ms, opens a note in <1 ms and saves in ~21 ms; a remote 1,000-note list is
+716 KB and stays virtualised in the client. Deferred to M2: link index, FTS,
+versions, drag-to-folder, pin, duplicate, pane resizing, in-app LazyCat mount
+validation.
 
 ### M2 — links, search, versions
 
@@ -498,8 +510,10 @@ checklist; installable `.lpk`; docs complete.
 |---|---|---|
 | 2026-11-05 | New implementation, MIT license | Only architecture/API shapes referenced; no Papyra/MiaoYan code copied |
 | 2026-11-05 | Filesystem is authoritative; SQLite index disposable | Matches MiaoYan's "notes are plain files" promise |
-| 2026-11-05 | API-created notes get managed frontmatter; imported notes untouched | Required for stable IDs without rewriting user data |
-| 2026-11-05 | Conflict backup on stale If-Match, return 412 | papyra-ingest retries on 409/412/428; user text must not be lost |
+| 2026-11-05 | Imported notes are never rewritten; M1 IDs are path hashes and no managed frontmatter is written | The filesystem stays the user's; path hashes avoid mutating imported files. Frontmatter `id` is revisited only if M4 ingest needs stable IDs across moves |
+| 2026-11-05 | Save conflicts use the body `etag` (plus response `ETag` header) and return 412 | One contract works for the SPA and for `papyra-ingest`, which retries on 409/412/428; `If-Match` is reserved for M4 |
+| 2026-11-05 | Deletion goes to `<vault>/.miaoyan/trash`, not the OS trash | Web/LazyCat containers have no host trash; in-app restore is the equivalent task |
+| 2026-11-05 | Self-write suppression window is 1 s | Longer windows swallowed external edits made right after an in-app save |
 | 2026-11-05 | PlantUML local jar only; no public server | Note content privacy |
 | 2026-11-05 | Single library, optional password + API key | v1 scope; LazyCat gateway provides user isolation |
 | 2026-11-05 | Browser shortcuts use `Cmd/Ctrl+Alt` aliases where the browser reserves the combo | Same tasks reachable in a tab |

@@ -5,6 +5,14 @@
 > substitutes where a native capability does not exist. This file is updated as
 > each milestone lands. Status: `Done`, `Partial`, `Substituted`, `N/A (native)`.
 
+**M1 status (2026-11-05):** the import → edit → attachment main line is
+complete and exercised in a browser against an imported sample vault:
+three-pane UI, create/rename/delete/restore, 650 ms autosave, live split
+preview, image drag-and-drop to `i/`, external edit refresh, conflict backup
+with “载入磁盘版本 / 保留我的文本”, light/dark/system themes, and a single-pane
+mobile layout. Server test suite: 11 passing. Rows marked `Planned (M2/M3)`
+are intentionally not in M1.
+
 Reference sources: MiaoYan `README_CN.md`, `ARCHITECTURE.md`,
 `skills/miaoyan/SKILL.md`, `Resources/Initial/*.md`, `AGENTS.md`, and the
 relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
@@ -14,13 +22,13 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| Three columns: folders/projects, note list, editor | Same three columns, resizable, with collapsible sidebar and list | Planned (M1) |
-| Sidebar shows All Notes, folders, Trash | All Notes, project rows with counts, Trash | Planned (M1) |
-| Brand row at the top of the sidebar | Wordmark "妙言 Web" + small bird mark (original asset, not MiaoYan's) | Planned (M1) |
-| Note list shows title, excerpt, modified time, pin | Same; virtualised; relative time; tag chips when present | Planned (M1) |
+| Three columns: folders/projects, note list, editor | Same three columns with collapsible sidebar and list; pointer-resizable widths arrive in M2 | Partial (M1) |
+| Sidebar shows All Notes, folders, Trash | All Notes, project rows with counts, Trash | Done (M1) |
+| Brand row at the top of the sidebar | Wordmark "妙言 Web" + original feather mark (not MiaoYan's asset) | Done (M1) |
+| Note list shows title, excerpt, modified time, pin | Same; virtualised; relative time; pin/tag chips in M2 | Partial (M1) |
 | Sort by modified / created / title | Same, plus pinned-first | Planned (M2) |
-| Drag note to a folder | HTML5 drag to project row; move is atomic on the server | Planned (M1) |
-| ⌘1 / ⌘2 collapse sidebar / list | Same logical action; keyboard aliases documented below | Planned (M1) |
+| Drag note to a folder | HTML5 drag to project row; move is atomic on the server | Planned (M2) |
+| ⌘1 / ⌘2 collapse sidebar / list | Same logical action; keyboard aliases documented below | Done (M1) |
 | Window title bar is part of the chrome | Slim app bar with breadcrumb and actions; no traffic lights | Substituted |
 | Native macOS window/menu bar | In-app menus: title-bar action menu, context menus, help dialog | Substituted |
 
@@ -28,17 +36,17 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| New note (⌘N) in the selected folder | Same; title inline-editable, default "未命名笔记" in Web (MiaoYan uses a UUID file shown as "Untitled Note") | Planned (M1) |
-| New folder (⇧⌘N) | Same | Planned (M1) |
-| Rename note (⌘R) by filename | Same; file renamed atomically; `" 2"` suffix on conflict as MiaoYan's `NameHelper` | Planned (M1) |
-| Duplicate note (⌘D) -> `Name Copy`, `Name Copy 2` | Same naming | Planned (M1) |
-| Delete (⌘⌫) -> system Trash | App trash `.miaoyan/trash/<timestamp>-<name>/` + `meta.json`, restorable in-app | Substituted |
-| Restore from Trash | Trash view with restore; collision restores beside the existing file | Planned (M1) |
-| Note = file; title = filename | Same | Planned (M1) |
-| Root-level notes are valid | Same; shown in All Notes | Planned (M1) |
-| Nested folders inside a project | Same; project tree supports subfolders, attachments resolve relative to the note | Planned (M1) |
+| New note (⌘N) in the selected folder | Same: empty title creates an uppercase UUID file displayed as "Untitled Note" | Done (M1) |
+| New folder (⇧⌘N) | Sidebar `+` button; Shift+⌘N alias in M2 | Partial (M1) |
+| Rename note (⌘R) by filename | Same; atomic rename; refuses when the destination exists (MiaoYan also refuses); `:` on disk displays as `/` | Done (M1) |
+| Duplicate note (⌘D) -> `Name Copy`, `Name Copy 2` | Same naming | Planned (M2) |
+| Delete (⌘⌫) -> system Trash | App trash `.miaoyan/trash/<timestamp>-<id>/` + `meta.json`, restorable in-app | Substituted |
+| Restore from Trash | Trash view with restore; collision restores beside the existing file | Done (M1) |
+| Note = file; title = filename | Same | Done (M1) |
+| Root-level notes are valid | Same; shown in All Notes | Done (M1) |
+| Nested folders inside a project | Recursive scan and per-note relative assets; a top-level project row lists all descendants (tree UI in M2) | Partial (M1) |
 | Pin note | Same; stored in the index (`pinned`), not in the Markdown file (MiaoYan also keeps UI state outside the file) | Planned (M2) |
-| Empty note fallback title | Web shows "未命名笔记" while the file name remains the source of truth | Substituted |
+| Empty note fallback title | UUID file displays as "Untitled Note" (same as MiaoYan); file name remains the source of truth | Done (M1) |
 | Reveal in Finder | "Reveal path" shows the relative vault path and copies it; no OS file manager integration | N/A (native) |
 | Open note in a separate window (⌘O) | Opens `/note/{id}` in a new browser tab | Substituted |
 | Finder file drop import | Drop `.md`/images/audio on the note list; imported into the selected project | Substituted |
@@ -48,13 +56,13 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| Source editing, never WYSIWYG | CodeMirror 6 source editing, same philosophy | Planned (M1) |
-| Markdown syntax highlighting (MiaoYan palette) | CodeMirror Markdown + custom highlight styles: headings `#5E3DB3`, emphasis `#9A7400`, links `#24837B`, markup `#7A7872` | Planned (M1) |
-| Split editor/preview (⌘\) | Same; split is the desktop default | Planned (M1) |
-| Editor-only / preview-only (⌘3) | Same | Planned (M1) |
-| Active line, bracket matching, undo/redo | Same | Planned (M1) |
-| Search/replace in editor (⌘F) | CodeMirror search panel; browser find remains available via ⌘F when focus is outside the editor | Planned (M1) |
-| Autosave (debounced) | 600 ms debounce, status 未保存/保存中/已保存/冲突 | Planned (M1) |
+| Source editing, never WYSIWYG | CodeMirror 6 source editing, same philosophy | Done (M1) |
+| Markdown syntax highlighting (MiaoYan palette) | CodeMirror Markdown with a theme-aware highlight style (headings/emphasis/links/code/quote); the exact MiaoYan palette is not copied | Substituted (M1) |
+| Split editor/preview (⌘\) | Same; split is the desktop default; ⌘\ toggles split/editor | Done (M1) |
+| Editor-only / preview-only (⌘3) | Same toolbar modes; ⌘3 alias in M3 | Partial (M1) |
+| Active line, bracket matching, undo/redo | Bracket matching, undo/redo, multiple selections; active line is deliberately unhighlighted for a quieter canvas | Partial (M1) |
+| Search/replace in editor (⌘F) | CodeMirror search panel; browser find remains available via ⌘F when focus is outside the editor | Done (M1) |
+| Autosave (debounced) | 650 ms debounce, status 未保存/正在保存/已保存/有冲突; flushes on note switch and `pagehide` | Done (M1) |
 | Typing performance gates (1 MB, 5000 lines) | > 1 MB: skip syntax highlighting and auto diagram render; > 5000 lines: simplified highlight | Planned (M3/M5) |
 | Toolbar formatting (bold, italic, strikethrough, code, link, image, etc.) | Same plus table/task/math/Mermaid/PlantUML/Markmap/PPT separator/fold | Planned (M1/M3) |
 | Slash templates + Tab (`/table`, `/task`, `/time`, `/img`, `/video`, `/mermaid`, `/plantuml`, `/markmap`, `/fold`) | Same trigger and expansion | Planned (M1/M3) |
@@ -70,20 +78,20 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| CommonMark + GFM (tables, tasks, footnotes, strikethrough, autolink) | markdown-it + task/footnote plugins | Planned (M1/M3) |
-| Code highlight (Highlightr) | highlight.js, GitHub light/dark palettes | Planned (M1) |
+| CommonMark + GFM (tables, tasks, footnotes, strikethrough, autolink) | markdown-it + task-list plugin; tables, tasks, strikethrough and autolinks render; footnotes arrive with the M3 plugin pass | Partial (M1) |
+| Code highlight (Highlightr) | highlight.js, GitHub light/dark palettes | Planned (M1/M3) |
 | KaTeX inline/block math | KaTeX with `$...$`, `$$...$$`; currency heuristic avoids false positives | Planned (M3) |
 | Mermaid diagrams | mermaid 11, client-side, theme-aware, lazy | Planned (M3) |
 | PlantUML diagrams | Local `plantuml.jar` over stdin; SVG returned by `/api/render/plantuml`; no public server | Planned (M3) |
 | Markmap mind maps | markmap-lib + markmap-view, interactive | Planned (M3) |
 | GitHub alerts NOTE/TIP/IMPORTANT/WARNING/CAUTION | Same rendering (tinted block, coloured title, no stripe) | Planned (M3) |
 | `<details>/<summary>` passthrough | Allowed by the sanitiser | Planned (M3) |
-| Frontmatter hidden when it looks like YAML | Same rule as `MiaoYanCore.Frontmatter`; a `---` deck opener without keys stays content | Planned (M1) |
-| Image display, remote images | Same; lightbox on click | Planned (M1/M3) |
-| Audio playback for `![[file.m4a]]` | Inline `<audio controls>`; audio links also become players | Planned (M3) |
+| Frontmatter hidden when it looks like YAML | Same rule as `MiaoYanCore.Frontmatter`; a `---` deck opener without keys stays content | Done (M1) |
+| Image display, remote images | Relative `i/` / `files/` images resolve to the note's asset endpoint; remote images display; lightbox in M3 | Partial (M1) |
+| Audio playback for `![[file.m4a]]` | Image-token audio (`![](...m4a)`) becomes an inline `<audio controls>`; plain audio links remain links until M3 | Partial (M1) |
 | Video embedding | Not stored; video upload extracts audio (ffmpeg) and transcript; remote video links remain links | Substituted |
-| Two-way scroll sync at 60 fps | Line-based sync via token source maps; preview click jumps to the source line | Planned (M1) |
-| Raw HTML allowed (responsive media, columns) | DOMPurify allowlist; `style` allowed on safe elements; scripts/iframes/forms/objects removed | Partial (M3) |
+| Two-way scroll sync at 60 fps | Line-based sync via token source maps; preview click jumps to the source line | Planned (M3) |
+| Raw HTML allowed (responsive media, columns) | DOMPurify allowlist; scripts/iframes/forms/objects removed; `style` on safe elements in M3 | Partial (M1) |
 | Iframe slide backgrounds (`data-background-iframe`) | Disabled for privacy; a styled placeholder is shown | N/A (security) |
 | Print / export PDF | Browser print stylesheet ("另存为 PDF"); no bundled Chromium | Substituted |
 
@@ -115,18 +123,18 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | `NoteVersionManager` per-note history in Application Support | `{state}/versions/<note-id>/`, newest 50 or 30 days | Planned (M2) |
 | Move history with rename/folder move/trash | Note ID is stable in the index, so history follows renames | Planned (M2) |
 | Version list + restore | Dialog with timestamp, size, preview; diff vs current; restore snapshots current first | Planned (M2) |
-| `FileSystemEventManager` watcher | Server `FileSystemWatcher` + debounce + SSE | Planned (M1) |
-| Ignore own writes | Write suppression by path + content hash | Planned (M1) |
-| Conflict backup while editing | `.miaoyan-conflicts/<project>-<note>-<timestamp>.md`, plus dialog and disk reload | Planned (M2) |
-| External change when clean | Quiet reload, cursor anchored by line | Planned (M1) |
+| `FileSystemEventManager` watcher | Server `FileSystemWatcher` with 300 ms debounce, SSE `change` events, plus a 1 s self-write suppression window | Done (M1) |
+| Ignore own writes | Path + one-second suppression window after an API write | Done (M1) |
+| Conflict backup while editing | `.miaoyan-conflicts/<project>-<note>-<timestamp>.md` on 412, dialog offering 载入磁盘版本 / 保留我的文本 | Done (M1) |
+| External change when clean | Quiet reload of editor and preview; cursor is preserved by CodeMirror's external-value sync (line anchoring is M2) | Partial (M1) |
 
 ## 8. Themes and display
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| Light / dark / follow system | Same; CSS variables + `prefers-color-scheme`; follows changes live | Planned (M1) |
-| Warm paper palette (`#FDFCF9` / `#1E1D1B`), sand selection | Same values; 7% hairline dividers | Planned (M1) |
-| MiaoYan green for brand/active buttons | Same accent role; exact hex may differ (no copied assets) | Partial |
+| Light / dark / follow system | Same; CSS variables + `prefers-color-scheme`; explicit override via toolbar menu; follows system live | Done (M1) |
+| Warm paper palette (`#FDFCF9` / `#1E1D1B`), sand selection | Warm paper palette in the same family (`#f6f5f1` / `#171815`), sand-green selection; exact values differ | Substituted (M1) |
+| MiaoYan green for brand/active buttons | Same accent role (`#2f7d63` light / `#7cc4a6` dark); exact hex differs (no copied assets) | Substituted (M1) |
 | Five UI languages | Chinese (default) + English; structure ready for more | Partial (v1) |
 | Code font follows text font option | Web uses a dedicated code stack; a "code follows text" toggle is omitted in v1 | N/A (native font stack) |
 
@@ -150,10 +158,11 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| Images in `i/`, other files in `files/` | Same, relative to the note's folder | Planned (M1) |
-| Paste image | Clipboard image -> upload -> `![](/i/name.png)` | Planned (M1) |
-| Drag image/file | Drag/drop into the editor | Planned (M1) |
-| Root-relative `/i/...` references | Same in Markdown; the Web resolver maps them to the note-relative asset endpoint | Planned (M1) |
+| Images in `i/`, other files in `files/` | Same, relative to the note's folder; server forces the `i`/`files` subdirectory from the MIME kind | Done (M1) |
+| Paste image | Clipboard image -> upload -> `![](i/name.png)` inserted at the cursor | Done (M1) |
+| Drag image/file | Drag/drop into the editor, inserted at the drop position; other files become `[name](files/name)` | Done (M1) |
+| Root-relative `/i/...` references | Same in Markdown; the Web resolver maps them to the note-relative `/api/notes/{id}/assets/...` endpoint | Done (M1) |
+| Path traversal / symlink escape | Asset names sanitised; resolved path must stay inside the note's `i`/`files` directory; symlinks rejected | Done (M1) |
 | Media cleanup for unused attachments | "Clean unused attachments" scans all note bodies before deleting; off by default | Planned (M5) |
 | Audio attachment playback | Inline player in preview | Planned (M3) |
 | Video support | Not stored; audio extraction + transcript (optional ffmpeg) | Substituted |
@@ -165,7 +174,7 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| Library is a user-picked folder | `MIAOYAN_LIBRARY` points at the folder; import copies or adopts an existing tree | Planned (M1) |
+| Library is a user-picked folder | `MIAOYAN_LIBRARY` points at the folder; an existing MiaoYan tree is adopted in place, never rewritten on import | Done (M1) |
 | iCloud / WebDAV sync is external | The vault is a normal folder; external sync tools can be used; watcher catches changes | Substituted |
 | Export note (Markdown) | Byte-faithful `.md` download | Planned (M3) |
 | Export HTML | Self-contained HTML with inline CSS; local media embedded where possible | Planned (M3) |
