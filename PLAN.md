@@ -1,6 +1,6 @@
 # MiaoYan Web — Implementation Plan
 
-> Status: M1 complete (2026-11-05); M2 next. This file is the contract for the
+> Status: M2 complete (2026-11-05); M3 next. This file is the contract for the
 > project; update it when a decision changes, and keep `COMPATIBILITY.md` in sync
 > with user-visible behaviour.
 
@@ -98,8 +98,11 @@ library**, with LazyCat gateway isolation or an optional password.
 The `/lzcapp/pkg` mount marks a real app container; if it exists without
 `/lzcapp/documents`, startup fails loudly instead of writing into the ephemeral
 rootfs. Per-request vaults are created on first use, logged, and probed for
-writability. M0 ships the resolver and health output; the on-device path is
-confirmed in M2 acceptance.
+writability. M0 ships the resolver and health output. The real-container
+`/lzcapp/documents/<uid>` mount was **not** verified in M2 because no LazyCat
+container runtime was available here; it is the first item of the M5 release
+checklist, and `MIAOYAN_DOCUMENTS_ROOT` + integration tests keep the resolver
+testable until then.
 
 ## 3. Filesystem model
 
@@ -468,12 +471,27 @@ attachment → delete → restore → external-edit → conflict flow. A 1,003-n
 versions, drag-to-folder, pin, duplicate, pane resizing, in-app LazyCat mount
 validation.
 
-### M2 — links, search, versions
+### M2 — links, search, versions — **done 2026-11-05**
 
 Wikilink index, backlinks, unresolved links, FTS search, note-list sorting/pin/
 move, versions/diff/restore, conflict backups. Acceptance: backlinks correct on
 a 500-note library; search < 150 ms; stale-save conflict creates a backup file
 and never loses text.
+
+Landed: `[[Exact title]]` index (code fences/inline code excluded, case-
+insensitive fallback), backlinks with line + excerpt, unresolved-link “创建笔记”,
+⌘K command palette, FTS5 trigram search with LIKE fallback for 1–2 letters and
+title-first ranking, version history with diff/restore (pre-edit snapshot, 50
+versions/30 days, history follows renames), pin (index table, survives rename),
+duplicate (`Name Copy`/`Name Copy 2`, ⌘D and menu), sort by modified/created/
+title with pinned-first, drag-to-project, resizable persisted panes, ⇧⌘N and ⌘R.
+Verification: 19 server tests; browser runs 14/14 (main line) and 11/11
+(pin/duplicate/shortcut) with zero unexpected console errors. On a generated
+500-note library backlinks returned exactly the 60 real `[[中心]]` links (plain
+text ignored); search median 2–3 ms, max 39 ms, well inside the 150 ms gate.
+Deferred: nested-folder tree UI (top-level project rows aggregate descendants),
+exact line anchoring after an external edit → M3, and in-container LazyCat mount
+validation → M5 release checklist.
 
 ### M3 — rich preview and presentation
 
@@ -517,3 +535,10 @@ checklist; installable `.lpk`; docs complete.
 | 2026-11-05 | PlantUML local jar only; no public server | Note content privacy |
 | 2026-11-05 | Single library, optional password + API key | v1 scope; LazyCat gateway provides user isolation |
 | 2026-11-05 | Browser shortcuts use `Cmd/Ctrl+Alt` aliases where the browser reserves the combo | Same tasks reachable in a tab |
+| 2026-11-05 | Pin lives in the SQLite index, not in the Markdown file or frontmatter | MiaoYan also keeps UI state out of notes; imported files stay byte-identical, and pruning the state only loses pins |
+| 2026-11-05 | Pinned rows are sorted first in both the API and the client, regardless of the chosen sort | One ordering rule avoids client/server disagreement; pin is a deliberate override of the sort |
+| 2026-11-05 | Search ranks exact title, then title-contains, then body (bm25/LIKE) | Query “欢迎” must open the note named 欢迎, not a note that merely mentions it |
+| 2026-11-05 | Renaming/moving a note changes its path-hash ID; the API returns the new ID and clients navigate to it, with a stale-ID recovery screen | Keeps IDs derived from the filesystem without writing frontmatter; avoids a side database of stable IDs |
+| 2026-11-05 | Version history snapshots the pre-edit bytes as well as the post-save bytes | Otherwise the first save of an imported note cannot be undone to its original text |
+| 2026-11-05 | Duplicate uses `Name Copy`, `Name Copy 2`… rather than `Name 2` | Matches MiaoYan's duplicate action; `Name 2` stays reserved for collision resolution |
+| 2026-11-05 | Nested sub-folders are flattened into the top-level project list in M2 | All notes remain reachable and movable; a collapsible tree needs its own drag/drop model and is deferred, recorded in COMPATIBILITY |

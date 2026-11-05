@@ -10,8 +10,16 @@ complete and exercised in a browser against an imported sample vault:
 three-pane UI, create/rename/delete/restore, 650 ms autosave, live split
 preview, image drag-and-drop to `i/`, external edit refresh, conflict backup
 with “载入磁盘版本 / 保留我的文本”, light/dark/system themes, and a single-pane
-mobile layout. Server test suite: 11 passing. Rows marked `Planned (M2/M3)`
-are intentionally not in M1.
+mobile layout.
+
+**M2 status (2026-11-05):** wikilinks, backlinks, unresolved links, FTS5 search
+(trigram + LIKE fallback), the ⌘K command palette, version history with diff and
+restore, pin, duplicate, sort, drag-to-project, resizable panes and `⇧⌘N` are
+implemented. Browser checks: 14/14 main-line plus 11/11 for pin/duplicate/project
+shortcut. Server suite: 19 passing. On a generated 500-note library, backlinks
+returned exactly the 60 real `[[中心]]` links (plain-text mentions ignored) and
+searches stayed at 2–3 ms median / 39 ms max. The nested-folder tree UI and
+line-anchored cursor restore remain deferred (see rows marked `Partial`).
 
 Reference sources: MiaoYan `README_CN.md`, `ARCHITECTURE.md`,
 `skills/miaoyan/SKILL.md`, `Resources/Initial/*.md`, `AGENTS.md`, and the
@@ -22,12 +30,12 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| Three columns: folders/projects, note list, editor | Same three columns with collapsible sidebar and list; pointer-resizable widths arrive in M2 | Partial (M1) |
+| Three columns: folders/projects, note list, editor | Same three columns with collapsible sidebar and list; pointer-resizable, persisted widths | Done |
 | Sidebar shows All Notes, folders, Trash | All Notes, project rows with counts, Trash | Done (M1) |
 | Brand row at the top of the sidebar | Wordmark "妙言 Web" + original feather mark (not MiaoYan's asset) | Done (M1) |
-| Note list shows title, excerpt, modified time, pin | Same; virtualised; relative time; pin/tag chips in M2 | Partial (M1) |
-| Sort by modified / created / title | Same, plus pinned-first | Planned (M2) |
-| Drag note to a folder | HTML5 drag to project row; move is atomic on the server | Planned (M2) |
+| Note list shows title, excerpt, modified time, pin | Same; virtualised; relative time; pin icon on pinned notes | Done |
+| Sort by modified / created / title | Same menu, plus pinned notes always first | Done (M2) |
+| Drag note to a folder | HTML5 drag to a project row or 未分类; the move is atomic on the server | Done (M2) |
 | ⌘1 / ⌘2 collapse sidebar / list | Same logical action; keyboard aliases documented below | Done (M1) |
 | Window title bar is part of the chrome | Slim app bar with breadcrumb and actions; no traffic lights | Substituted |
 | Native macOS window/menu bar | In-app menus: title-bar action menu, context menus, help dialog | Substituted |
@@ -37,15 +45,15 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
 | New note (⌘N) in the selected folder | Same: empty title creates an uppercase UUID file displayed as "Untitled Note" | Done (M1) |
-| New folder (⇧⌘N) | Sidebar `+` button; Shift+⌘N alias in M2 | Partial (M1) |
-| Rename note (⌘R) by filename | Same; atomic rename; refuses when the destination exists (MiaoYan also refuses); `:` on disk displays as `/` | Done (M1) |
-| Duplicate note (⌘D) -> `Name Copy`, `Name Copy 2` | Same naming | Planned (M2) |
+| New folder (⇧⌘N) | ⇧⌘N opens the sidebar's 新建项目 dialog; the `+` button remains | Done (M2) |
+| Rename note (⌘R) by filename | Same; ⌘R opens the rename dialog; atomic rename; refuses when the destination exists (MiaoYan also refuses); `:` on disk displays as `/` | Done |
+| Duplicate note (⌘D) -> `Name Copy`, `Name Copy 2` | Same naming, byte-faithful copy; ⌘D on the open note and a 创建副本 menu item | Done (M2) |
 | Delete (⌘⌫) -> system Trash | App trash `.miaoyan/trash/<timestamp>-<id>/` + `meta.json`, restorable in-app | Substituted |
 | Restore from Trash | Trash view with restore; collision restores beside the existing file | Done (M1) |
 | Note = file; title = filename | Same | Done (M1) |
 | Root-level notes are valid | Same; shown in All Notes | Done (M1) |
-| Nested folders inside a project | Recursive scan and per-note relative assets; a top-level project row lists all descendants (tree UI in M2) | Partial (M1) |
-| Pin note | Same; stored in the index (`pinned`), not in the Markdown file (MiaoYan also keeps UI state outside the file) | Planned (M2) |
+| Nested folders inside a project | Recursive scan and per-note relative assets; a top-level project row lists all descendants as one flat list. A collapsible sub-folder tree is deferred: the same notes are reachable, only the hierarchy in the sidebar is missing | Partial (deferred; recorded substitution) |
+| Pin note | Same; pin survives rename and reload, pinned-first ordering; stored in the index (`pinned`), not in the Markdown file (MiaoYan also keeps UI state outside the file) | Done (M2) |
 | Empty note fallback title | UUID file displays as "Untitled Note" (same as MiaoYan); file name remains the source of truth | Done (M1) |
 | Reveal in Finder | "Reveal path" shows the relative vault path and copies it; no OS file manager integration | N/A (native) |
 | Open note in a separate window (⌘O) | Opens `/note/{id}` in a new browser tab | Substituted |
@@ -99,34 +107,34 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| `[[Exact title]]` links by title, no `.md` | Same parser; exact title first, case-insensitive fallback; no alias/heading syntax (per MiaoYan skill) | Planned (M2) |
+| `[[Exact title]]` links by title, no `.md` | Same parser; exact title first, case-insensitive fallback; no alias/heading syntax (per MiaoYan skill); code fences and inline code are excluded | Done (M2) |
 | Click a wikilink to open the note | Same; `miaoyan://` / `nv://` routes are not used, in-app navigation instead | Substituted |
-| Backlinks panel | Same; context excerpt per backlink | Planned (M2) |
-| Unresolved link style | Dashed/muted link with "创建笔记" action; creates a note with that title in the current project | Planned (M2) |
-| Rename updates link index | Index updates on rename; note text elsewhere is not rewritten (MiaoYan also indexes rather than rewrites) | Planned (M2) |
-| Links across any folder depth | Same; Trash excluded | Planned (M2) |
+| Backlinks panel | Same; context excerpt and source line per backlink; updates when the source is renamed | Done (M2) |
+| Unresolved link style | Dashed/muted link with "创建笔记" action; creates a note with that title in the current project | Done (M2) |
+| Rename updates link index | Index updates on rename; note text elsewhere is not rewritten (MiaoYan also indexes rather than rewrites), so links to the old title become unresolved | Done (M2) |
+| Links across any folder depth | Same; Trash excluded | Done (M2) |
 
 ## 6. Search
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| Note-list search filters within the selected folder | Same: project scope first, then title/body match | Planned (M2) |
-| Search reads unloaded note bodies off the main thread | Server-side FTS5; client never loads all bodies | Planned (M2) |
-| Command palette (⌘K in Web; MiaoYan uses its search field) | ⌘K / Ctrl+K palette with title, snippet, project; Enter opens | Planned (M2) |
-| Chinese search | FTS5 trigram tokenizer + LIKE fallback for 1–2 character queries | Planned (M2) |
-| Result speed | Target < 150 ms on 10k notes | Planned (M2) |
+| Note-list search filters within the selected folder | Same: project scope first, then title/body match; title matches rank above body matches | Done (M2) |
+| Search reads unloaded note bodies off the main thread | Server-side FTS5; client never loads all bodies | Done (M2) |
+| Command palette (⌘K in Web; MiaoYan uses its search field) | ⌘K / Ctrl+K palette with title, snippet, project; arrow keys + Enter; recent notes when empty | Done (M2) |
+| Chinese search | FTS5 trigram tokenizer + LIKE fallback (with `%`/`_` escaping) for 1–2 character queries | Done (M2) |
+| Result speed | Measured 2–3 ms median, 39 ms max on a 500-note library; 10k-note target still to be benchmarked | Partial (M2; meets target at 500 notes) |
 
 ## 7. Versions, conflicts, external changes
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| `NoteVersionManager` per-note history in Application Support | `{state}/versions/<note-id>/`, newest 50 or 30 days | Planned (M2) |
-| Move history with rename/folder move/trash | Note ID is stable in the index, so history follows renames | Planned (M2) |
-| Version list + restore | Dialog with timestamp, size, preview; diff vs current; restore snapshots current first | Planned (M2) |
+| `NoteVersionManager` per-note history in Application Support | `{state}/versions/<note-id>/`, newest 50 or, if older, 30 days; the pre-edit text is snapshotted too, so the first save is undoable | Done (M2) |
+| Move history with rename/folder move/trash | Version directories are migrated when a rename/move changes the path-derived ID | Done (M2) |
+| Version list + restore | Dialog with timestamp, size, preview; diff vs current; restore snapshots current first | Done (M2) |
 | `FileSystemEventManager` watcher | Server `FileSystemWatcher` with 300 ms debounce, SSE `change` events, plus a 1 s self-write suppression window | Done (M1) |
 | Ignore own writes | Path + one-second suppression window after an API write | Done (M1) |
 | Conflict backup while editing | `.miaoyan-conflicts/<project>-<note>-<timestamp>.md` on 412, dialog offering 载入磁盘版本 / 保留我的文本 | Done (M1) |
-| External change when clean | Quiet reload of editor and preview; cursor is preserved by CodeMirror's external-value sync (line anchoring is M2) | Partial (M1) |
+| External change when clean | Quiet reload of editor and preview; CodeMirror's external-value sync keeps the cursor near the edit, but exact line anchoring is deferred to M3 | Partial (deferred) |
 
 ## 8. Themes and display
 
@@ -281,7 +289,7 @@ and marks unavailable browser-reserved ones.
 | Retina 60fps native preview | Browser rendering, line-anchored scroll sync | M3; same task, not identical rendering |
 | Multiple windows | Browser tabs, one note per tab | Accepted substitution |
 | Menu bar / Dock | LazyCat launcher and in-app menus | Accepted substitution |
-| System Trash | App trash at `.miaoyan/trash` | M2; restore is in-app |
+| System Trash | App trash at `.miaoyan/trash` | M1; restore is in-app |
 | Global hotkey | None (browser sandbox) | Accepted; use the LazyCat app icon |
 
 App-store constraints that shape the implementation:
@@ -300,12 +308,14 @@ App-store constraints that shape the implementation:
 
 - [ ] Import a real MiaoYan library with nested projects, images, audio, math,
       Mermaid, PlantUML, Markmap, PPT, alerts, and footnotes.
-- [ ] Edit a note, watch autosave, kill the connection, verify no text is lost.
-- [ ] External `echo >> note.md` refreshes the open note; a dirty editor gets a
-      conflict backup and a clear dialog.
-- [ ] Rename a linked note; backlinks still resolve.
-- [ ] Search Chinese 2-character and 4-character queries.
-- [ ] Restore a deleted note and an old version.
+- [x] Edit a note, watch autosave, kill the connection, verify no text is lost.
+- [x] External `echo >> note.md` refreshes the open note; a dirty editor gets a
+      conflict backup and a clear dialog (M1; also covered by a server test).
+- [x] Rename a linked note; renaming the source keeps its backlink; renaming the
+      target leaves old-title links unresolved by design (both covered by a
+      server test).
+- [x] Search Chinese 2-character and 4-character queries.
+- [x] Restore a deleted note and an old version.
 - [ ] Present a deck; exit; print to PDF.
 - [ ] Upload/paste an image and an audio file; play audio inline.
 - [ ] Run `papyra-ingest` twice on the same source; no duplicate note.

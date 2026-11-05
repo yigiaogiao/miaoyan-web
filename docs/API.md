@@ -7,7 +7,7 @@
 { "error": "code", "message": "human readable detail" }
 ```
 
-## 已实现（M0 / M1）
+## 已实现（M0–M2）
 
 ### `GET /healthz`
 
@@ -53,12 +53,19 @@
 | `POST` | `/api/projects` | `{name}`，空名自动生成“新建项目 N” |
 | `PATCH` | `/api/projects/{id}` | `{name}` 重命名；目标已存在返回 409 |
 | `DELETE` | `/api/projects/{id}` | 整个文件夹移入 `.miaoyan/trash`，返回 204 |
-| `GET` | `/api/notes?project=&q=` | 笔记元数据列表；`project` 为空表示全部，`q` 匹配标题/正文 |
+| `GET` | `/api/notes?project=&q=` | 笔记元数据列表；`project` 为空表示全部，`q` 匹配标题/正文；置顶笔记排在最前 |
 | `POST` | `/api/notes` | `{projectId?, title?}`；空标题使用大写 UUID 文件名，显示为 “Untitled Note” |
 | `GET` | `/api/notes/{id}` | 正文 + 元数据 + `ETag` 响应头 |
 | `PUT` | `/api/notes/{id}` | `{content, etag}`；`etag` 不匹配返回 412 和冲突 JSON；成功后返回新笔记 |
-| `PATCH` | `/api/notes/{id}` | `{title?, projectId?}` 重命名/移动；目标存在返回 409；可能返回新 `id` |
+| `PATCH` | `/api/notes/{id}` | `{title?, projectId?, pinned?}` 重命名/移动/置顶；目标存在返回 409；可能返回新 `id` |
+| `POST` | `/api/notes/{id}/duplicate` | 创建副本，返回 201 与新笔记；命名为 `Name Copy`、`Name Copy 2`… |
 | `DELETE` | `/api/notes/{id}` | 移入 `.miaoyan/trash`，返回 204 |
+| `GET` | `/api/links` | wikilink 索引：已解析目标与未解析标题 |
+| `GET` | `/api/notes/{id}/backlinks` | 反向链接（来源笔记、行号、上下文片段） |
+| `GET` | `/api/search?q=&project=&limit=` | FTS5 搜索；`limit` 默认 50，限制在 1–500 |
+| `GET` | `/api/notes/{id}/versions` | 版本列表，最新在前 |
+| `GET` | `/api/notes/{id}/versions/{versionId}` | 版本正文 |
+| `POST` | `/api/notes/{id}/versions/{versionId}/restore` | `{etag?}` 恢复；当前内容先存为版本；返回恢复后的笔记 |
 | `POST` | `/api/notes/{id}/assets?kind=image\|file` | multipart 字段 `file`；返回 `AssetDto` |
 | `GET` | `/api/notes/{id}/assets/{**path}` | 读取笔记目录下 `i/` 或 `files/` 中的附件，支持 Range |
 | `GET` | `/api/trash` | 回收站条目（笔记与项目） |
@@ -82,9 +89,13 @@
   "createdAt": "2026-10-01T08:00:00+00:00",
   "size": 1234,
   "isUntitled": false,
+  "pinned": false,
   "hasBom": false
 }
 ```
+
+列表项 `NoteSummaryDto` 与 `NoteDto` 相同，但没有 `content`、`etag`、`hasBom`，并以
+`excerpt` 代替正文；两者都带 `pinned`。
 
 `ETag` 由内容与修改时间的哈希计算，同时放在响应头（带引号）和 JSON 的 `etag` 字段里。
 `PUT` 优先读取 JSON 里的 `etag`；`If-Match` 已预留，M4 的 Papyra 兼容层使用。
@@ -101,7 +112,8 @@
 }
 ```
 
-服务端在返回 412 前已把磁盘当前内容备份到 `conflictPath`，不会覆盖任何一方。
+服务端在返回 412 前已把本次提交的文本写入 `conflictPath`，磁盘上的当前内容放在
+`currentContent` 里；两边都不会被覆盖。
 
 附件上传返回：
 
@@ -142,17 +154,72 @@ data: {"kind":"note|project|trash","noteId":"n...","path":"工作/x.md","at":"..
 
 服务端每 20 秒发送 `: ping` 保活；前端断开后 3 秒重连。
 
-### 计划中的 Web API（M2–M3）
+### 链接、反向链接与搜索
+
+`GET /api/links`：
+
+```json
+{
+  "targets": [{ "title": "周报", "noteId": "n523a27722adb", "projectName": "工作", "path": "工作/周报.md" }],
+  "unresolved": [{ "title": "还没写的笔记", "count": 1 }]
+}
+```
+
+`[[标题]]` 只在正文中统计，代码围栏与行内代码里的内容会被忽略；标题匹配区分大小写优先，
+不区分大小写仅作为回退。未解析标题用于预览中的“创建笔记”动作。
+
+`GET /api/notes/{id}/backlinks`：
+
+```json
+[
+  {
+    "noteId": "n4e08abd6b4ba",
+    "title": "欢迎",
+    "projectName": "未分类",
+    "line": 6,
+    "excerpt": "相关：[[欢迎]]"
+  }
+]
+```
+
+`GET /api/search?q=量子纠缠&limit=40`：
+
+```json
+[
+  {
+    "id": "n4e08abd6b4ba",
+    "title": "量子纠缠",
+    "projectId": "root",
+    "projectName": "未分类",
+    "snippet": "…关于量子纠缠的正文…",
+    "modifiedAt": "2026-11-05T10:00:00+00:00",
+    "size": 1234,
+    "isUntitled": false
+  }
+]
+```
+
+三个及以上字符使用 FTS5 trigram；一至两个字符回退到 `LIKE`，`%`、`_`、`\` 会被转义。
+标题精确匹配、标题包含匹配排在正文匹配之前。
+
+### 版本
+
+`GET /api/notes/{id}/versions`：
+
+```json
+[
+  { "id": "638900000000000000-a1b2c3d4", "createdAt": "2026-11-05T10:00:00+00:00", "size": 1234, "etag": "a1b2…", "isCurrent": true }
+]
+```
+
+`GET /api/notes/{id}/versions/{versionId}` 返回 `{id, content, createdAt, size, etag}`。
+`POST …/restore` 接受 `{etag?}`；恢复前会把当前内容存为版本，`etag` 不匹配同样返回 412。
+重命名或移动导致笔记 ID 变化时，版本目录会一起迁移；保留最新 50 个版本或 30 天内的版本。
+
+### 计划中的 Web API（M3）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `PATCH` | `/api/notes/{id}` | 在重命名之外增加 `pinned`、`sort` 字段 |
-| `GET` | `/api/notes/{id}/backlinks` | 反向链接 |
-| `GET` | `/api/links/unresolved` | 未解析 wikilink |
-| `GET` | `/api/search?q=` | FTS5 搜索，返回片段 |
-| `GET` | `/api/notes/{id}/versions` | 版本列表 |
-| `GET` | `/api/notes/{id}/versions/{v}` | 版本正文 |
-| `POST` | `/api/notes/{id}/versions/{v}/restore` | 恢复版本 |
 | `GET` | `/api/export/note/{id}?format=md\|html` | 单篇导出 |
 | `GET` | `/api/export/deck/{id}` | PPT 导出 |
 | `POST` | `/api/import` | 导入妙言书库 zip/目录 |
