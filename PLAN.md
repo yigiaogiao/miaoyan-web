@@ -1,6 +1,6 @@
 # MiaoYan Web — Implementation Plan
 
-> Status: M2 complete (2026-11-05); M3 next. This file is the contract for the
+> Status: M3 complete (2026-11-05); M4 next. This file is the contract for the
 > project; update it when a decision changes, and keep `COMPATIBILITY.md` in sync
 > with user-visible behaviour.
 
@@ -493,12 +493,44 @@ Deferred: nested-folder tree UI (top-level project rows aggregate descendants),
 exact line anchoring after an external edit → M3, and in-container LazyCat mount
 validation → M5 release checklist.
 
-### M3 — rich preview and presentation
+### M3 — rich preview and presentation — **done 2026-11-05**
 
 KaTeX, Mermaid, PlantUML (local), Markmap, alerts, lightbox, audio, PPT,
 themes, focus/typewriter, TOC, export HTML/MD/PDF. Acceptance: render a note
 exercising every fence; run a deck; export and reopen the HTML; PlantUML works
 offline or reports clearly.
+
+Landed: KaTeX with a currency heuristic, theme-aware Mermaid/Markmap, local
+PlantUML over stdin (`/api/render/plantuml`, clear 503 when the jar is absent),
+GitHub alerts, footnotes, highlight.js, code copy buttons and an image
+lightbox; reveal.js PPT with frontmatter/fence-aware `---` splitting, leading
+config-comment parsing (incl. nested dot keys), `.slide:` backgrounds,
+`.element:` fragments, raw HTML slides, fullscreen, print and Esc-to-exit with
+SPA-friendly options (`history:false`, `hash:false`); focus/typewriter modes,
+persisted font size/line height/column width; outline drawer; formatting
+toolbar; `/`-triggered template menu; Markdown tidy; editor↔preview scroll
+sync; audio player; Markdown/HTML/PDF export (HTML inlines KaTeX CSS, local
+images as data URLs); shared diagram renderer used by preview, PPT and export.
+
+Verification: `m3-render` 18/18 (math, alerts, all three diagrams, highlight,
+copy, footnotes, lightbox, dark-theme diagrams, no unexpected console errors);
+`m3-ui` 18/18 (toolbar, heading/bold, slash table, outline, font range, focus
+enter/exit, two-way scroll sync, MD/HTML downloads); `m3-ppt` 16/16 (shortcut,
+six slides, config stripped, background, fragment order, math/code/mermaid,
+progress/page number, navigation, Escape, console); `m3-ppt-security` 3/3
+(raw flex layout preserved, `<script>`/`onerror` removed). Server suite:
+26/26; production typecheck and build pass.
+
+Deviations recorded in `COMPATIBILITY.md`: reveal's code line-range stepping
+(`[1|2-4]`) is rendered as ordinary highlighted code and cannot advance;
+speaker notes/zoom plugins are not bundled; `data-background-iframe` and
+`data-background-video-local` are dropped for privacy; Esc closes the deck
+before reveal's overview, while Enter keeps reveal's overview; scroll sync is
+line-anchored and drifts inside very long paragraphs; exported HTML references
+KaTeX fonts by absolute app URL unless they were already inlined by the build;
+PPT source HTML is sanitised, so authored inline `style` survives but scripts
+and event handlers do not. Word count/reading time and the smart typography
+command remain M5 polish.
 
 ### M4 — Papyra compatibility and ingest
 
@@ -542,3 +574,11 @@ checklist; installable `.lpk`; docs complete.
 | 2026-11-05 | Version history snapshots the pre-edit bytes as well as the post-save bytes | Otherwise the first save of an imported note cannot be undone to its original text |
 | 2026-11-05 | Duplicate uses `Name Copy`, `Name Copy 2`… rather than `Name 2` | Matches MiaoYan's duplicate action; `Name 2` stays reserved for collision resolution |
 | 2026-11-05 | Nested sub-folders are flattened into the top-level project list in M2 | All notes remain reachable and movable; a collapsible tree needs its own drag/drop model and is deferred, recorded in COMPATIBILITY |
+| 2026-11-05 | PPT uses reveal.js core only with `history:false` and `hash:false` | The deck is an overlay inside the SPA; hash/history changes would fight the router and browser back |
+| 2026-11-05 | Esc is captured before reveal and closes the deck | Reveal consumes Esc for its overview; "leave the presentation" is the more common task and must always work |
+| 2026-11-05 | Background iframes/videos are stripped from slides | They can leak note context to third parties and are not needed for the presentation task; colour/image backgrounds remain |
+| 2026-11-05 | PPT slide HTML goes through the same DOMPurify allowlist as preview | A deck is still note content; one sanitiser avoids a second, weaker escape hatch |
+| 2026-11-05 | Export renders diagrams offscreen with a shared renderer and inlines same-origin images as data URLs | One HTML file must reopen without the vault; a bounded 8 s wait keeps export usable when a diagram fails |
+| 2026-11-05 | Scroll sync writes/reads `data-source-line` anchors and uses a short source guard | Cheap, works with token maps, and stops the two panes from echoing each other |
+| 2026-11-05 | Markmap dark mode is driven by a `.markmap-dark` ancestor class | markmap-view selects its palette from that class, not from CSS variables |
+| 2026-11-05 | The `/` menu is a CodeMirror autocompletion source, not a custom popup | Keeps keyboard semantics (arrows, Enter, Escape) identical across desktop and mobile |

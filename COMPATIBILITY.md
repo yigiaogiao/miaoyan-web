@@ -18,8 +18,18 @@ restore, pin, duplicate, sort, drag-to-project, resizable panes and `⇧⌘N` ar
 implemented. Browser checks: 14/14 main-line plus 11/11 for pin/duplicate/project
 shortcut. Server suite: 19 passing. On a generated 500-note library, backlinks
 returned exactly the 60 real `[[中心]]` links (plain-text mentions ignored) and
-searches stayed at 2–3 ms median / 39 ms max. The nested-folder tree UI and
-line-anchored cursor restore remain deferred (see rows marked `Partial`).
+searches stayed at 2–3 ms median / 39 ms max. The nested-folder tree UI remains
+deferred (see rows marked `Partial`).
+
+**M3 status (2026-11-05):** KaTeX, Mermaid, local PlantUML, Markmap, GitHub
+alerts, footnotes, code highlighting, code-copy buttons, image lightbox, audio,
+reveal.js PPT with config/slide/fragment directives, focus/typewriter modes,
+font settings, outline, formatting toolbar, `/` menu, tidy, line-anchored
+scroll sync, and Markdown/HTML/PDF export are implemented. Browser checks:
+18/18 rendering, 18/18 editor UX, 16/16 PPT, 3/3 PPT sanitisation; server suite
+26/26. Remaining differences are in the PPT and export rows: code line-range
+stepping, speaker notes/zoom plugins, iframe backgrounds, and the fact that the
+exported HTML references KaTeX fonts at the app's absolute URL.
 
 Reference sources: MiaoYan `README_CN.md`, `ARCHITECTURE.md`,
 `skills/miaoyan/SKILL.md`, `Resources/Initial/*.md`, `AGENTS.md`, and the
@@ -67,41 +77,41 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | Source editing, never WYSIWYG | CodeMirror 6 source editing, same philosophy | Done (M1) |
 | Markdown syntax highlighting (MiaoYan palette) | CodeMirror Markdown with a theme-aware highlight style (headings/emphasis/links/code/quote); the exact MiaoYan palette is not copied | Substituted (M1) |
 | Split editor/preview (⌘\) | Same; split is the desktop default; ⌘\ toggles split/editor | Done (M1) |
-| Editor-only / preview-only (⌘3) | Same toolbar modes; ⌘3 alias in M3 | Partial (M1) |
+| Editor-only / preview-only (⌘3) | Same toolbar modes; ⌘3 alias added | Done (M3) |
 | Active line, bracket matching, undo/redo | Bracket matching, undo/redo, multiple selections; active line is deliberately unhighlighted for a quieter canvas | Partial (M1) |
 | Search/replace in editor (⌘F) | CodeMirror search panel; browser find remains available via ⌘F when focus is outside the editor | Done (M1) |
 | Autosave (debounced) | 650 ms debounce, status 未保存/正在保存/已保存/有冲突; flushes on note switch and `pagehide` | Done (M1) |
-| Typing performance gates (1 MB, 5000 lines) | > 1 MB: skip syntax highlighting and auto diagram render; > 5000 lines: simplified highlight | Planned (M3/M5) |
-| Toolbar formatting (bold, italic, strikethrough, code, link, image, etc.) | Same plus table/task/math/Mermaid/PlantUML/Markmap/PPT separator/fold | Planned (M1/M3) |
-| Slash templates + Tab (`/table`, `/task`, `/time`, `/img`, `/video`, `/mermaid`, `/plantuml`, `/markmap`, `/fold`) | Same trigger and expansion | Planned (M1/M3) |
-| Word count / reading time | Same, CJK-aware | Planned (M1) |
-| TOC / outline (⌘5) | Outline drawer in preview and editor; click to jump | Planned (M1) |
-| Focus mode / typewriter mode | Both; persisted per browser | Planned (M3) |
-| Font size / line height / editor width settings | Same; persisted | Planned (M3) |
-| Auto-format (⇧⌘L, Prettier-like) | Browser-side Markdown formatter (headings, list spacing, blank lines, fences); never rewrites code/math/wikilinks/frontmatter | Planned (M3) |
+| Typing performance gates (1 MB, 5000 lines) | > 1 MB: skip syntax highlighting and auto diagram render; > 5000 lines: simplified highlight | Planned (M5) |
+| Toolbar formatting (bold, italic, strikethrough, code, link, image, etc.) | H1–H3, bold, italic, strikethrough, inline code, link, quote, bullet/ordered/task list, table, math, divider, tidy, plus a `/` hint; images are inserted by paste/drag rather than a toolbar button | Partial (M3) |
+| Slash templates + Tab (`/table`, `/task`, `/time`, `/img`, `/video`, `/mermaid`, `/plantuml`, `/markmap`, `/fold`) | `/` opens a CodeMirror menu for headings, lists, task, quote, code, table, math, Mermaid, Markmap, alert, PPT divider, link and date; `/time`, `/img`, `/video`, `/plantuml`, `/fold` are not in the menu | Partial (M3) |
+| Word count / reading time | Not yet shown | Planned (M5) |
+| TOC / outline (⌘5) | Outline drawer in preview and editor; click to jump | Done (M3) |
+| Focus mode / typewriter mode | Both; persisted per browser; focus hides both side columns and Esc/⌘⇧F exits | Done (M3) |
+| Font size / line height / editor width settings | Same; persisted | Done (M3) |
+| Auto-format (⇧⌘L, Prettier-like) | Tidy command normalises headings, list markers, blank runs and trailing spaces while leaving code fences, math and frontmatter intact; it is not a full Prettier port | Substituted (M3) |
 | Native CJK IME handling | Browser IME; CodeMirror handles composition events correctly | Substituted |
-| Smart typography cleaning | A "clean typography" command that protects code/math/links/frontmatter, mirroring MiaoYan's `TypographyCleaner` rules | Partial (M3) |
+| Smart typography cleaning | Not yet implemented | Planned (M5) |
 
 ## 4. Preview and rendering
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| CommonMark + GFM (tables, tasks, footnotes, strikethrough, autolink) | markdown-it + task-list plugin; tables, tasks, strikethrough and autolinks render; footnotes arrive with the M3 plugin pass | Partial (M1) |
-| Code highlight (Highlightr) | highlight.js, GitHub light/dark palettes | Planned (M1/M3) |
-| KaTeX inline/block math | KaTeX with `$...$`, `$$...$$`; currency heuristic avoids false positives | Planned (M3) |
-| Mermaid diagrams | mermaid 11, client-side, theme-aware, lazy | Planned (M3) |
-| PlantUML diagrams | Local `plantuml.jar` over stdin; SVG returned by `/api/render/plantuml`; no public server | Planned (M3) |
-| Markmap mind maps | markmap-lib + markmap-view, interactive | Planned (M3) |
-| GitHub alerts NOTE/TIP/IMPORTANT/WARNING/CAUTION | Same rendering (tinted block, coloured title, no stripe) | Planned (M3) |
-| `<details>/<summary>` passthrough | Allowed by the sanitiser | Planned (M3) |
+| CommonMark + GFM (tables, tasks, footnotes, strikethrough, autolink) | markdown-it + task-list + footnote plugins; tables, tasks, strikethrough, autolinks and footnotes render | Done (M3) |
+| Code highlight (Highlightr) | highlight.js with a 24-language core subset and light/dark palettes; a copy button appears on hover | Done (M3) |
+| KaTeX inline/block math | KaTeX with `$...$`, `$$...$$`; currency heuristic avoids false positives | Done (M3) |
+| Mermaid diagrams | mermaid 11, client-side, theme-aware, lazy, strict security level | Done (M3) |
+| PlantUML diagrams | Local `plantuml.jar` over stdin; SVG returned by `/api/render/plantuml` and sanitised; no public server. A missing jar shows “PlantUML is not installed” in the block | Done (M3) |
+| Markmap mind maps | markmap-lib + markmap-view, interactive, theme-aware (dark palette via `.markmap-dark`) | Done (M3) |
+| GitHub alerts NOTE/TIP/IMPORTANT/WARNING/CAUTION | Same rendering (tinted block, coloured title, no stripe) | Done (M3) |
+| `<details>/<summary>` passthrough | Allowed by the sanitiser | Done (M3) |
 | Frontmatter hidden when it looks like YAML | Same rule as `MiaoYanCore.Frontmatter`; a `---` deck opener without keys stays content | Done (M1) |
-| Image display, remote images | Relative `i/` / `files/` images resolve to the note's asset endpoint; remote images display; lightbox in M3 | Partial (M1) |
-| Audio playback for `![[file.m4a]]` | Image-token audio (`![](...m4a)`) becomes an inline `<audio controls>`; plain audio links remain links until M3 | Partial (M1) |
-| Video embedding | Not stored; video upload extracts audio (ffmpeg) and transcript; remote video links remain links | Substituted |
-| Two-way scroll sync at 60 fps | Line-based sync via token source maps; preview click jumps to the source line | Planned (M3) |
-| Raw HTML allowed (responsive media, columns) | DOMPurify allowlist; scripts/iframes/forms/objects removed; `style` on safe elements in M3 | Partial (M1) |
+| Image display, remote images | Relative `i/` / `files/` images resolve to the note's asset endpoint; remote images display with lazy loading; click opens a lightbox (Esc closes) | Done (M3) |
+| Audio playback for `![[file.m4a]]` | Image-token audio (`![](...m4a)`) becomes an inline `<audio controls>`; plain audio links remain links | Done (M3) |
+| Video embedding | Not stored; remote video links remain links; local audio extraction is M5 | Substituted |
+| Two-way scroll sync at 60 fps | Line-anchored sync via token `data-source-line` maps; editor→preview follows the visible line and preview→editor jumps on scroll; a short guard prevents feedback loops. Inside a very long paragraph the anchor drifts | Partial (M3) |
+| Raw HTML allowed (responsive media, columns) | DOMPurify allowlist; scripts/iframes/forms/objects/`<style>` elements removed, event-handler attributes removed, inline `style` on safe elements preserved | Done (M3) |
 | Iframe slide backgrounds (`data-background-iframe`) | Disabled for privacy; a styled placeholder is shown | N/A (security) |
-| Print / export PDF | Browser print stylesheet ("另存为 PDF"); no bundled Chromium | Substituted |
+| Print / export PDF | Browser print stylesheet and a print window ("另存为 PDF"); no bundled Chromium | Substituted (M3) |
 
 ## 5. Wikilinks, backlinks, unresolved links
 
@@ -134,7 +144,7 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | `FileSystemEventManager` watcher | Server `FileSystemWatcher` with 300 ms debounce, SSE `change` events, plus a 1 s self-write suppression window | Done (M1) |
 | Ignore own writes | Path + one-second suppression window after an API write | Done (M1) |
 | Conflict backup while editing | `.miaoyan-conflicts/<project>-<note>-<timestamp>.md` on 412, dialog offering 载入磁盘版本 / 保留我的文本 | Done (M1) |
-| External change when clean | Quiet reload of editor and preview; CodeMirror's external-value sync keeps the cursor near the edit, but exact line anchoring is deferred to M3 | Partial (deferred) |
+| External change when clean | Quiet reload of editor and preview; CodeMirror's external-value sync keeps the cursor near the edit, but exact cursor line anchoring after an external rewrite is still approximate (split-view scroll sync is line-anchored) | Partial |
 
 ## 8. Themes and display
 
@@ -150,17 +160,17 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | MiaoYan behaviour | MiaoYan Web implementation | Status |
 |---|---|---|
-| `---` on its own line separates slides | Same, outside fenced code and frontmatter | Planned (M3) |
-| ⌘⌥P opens PPT | Ctrl/Cmd+Alt+P; also the toolbar button | Planned (M3) |
-| Only notes with `---` can present | Same; button disabled with a tooltip otherwise | Planned (M3) |
-| Leading HTML comment config for Reveal | Same keys (`transition`, `backgroundTransition`, `transitionSpeed`, `controls`, `progress`, `slideNumber`); nested dot keys supported | Planned (M3) |
-| `.slide:` background directives | Same (`data-background` colours/gradients/images) | Planned (M3) |
-| `.element:` fragments | Supported for paragraphs/list items; complex arbitrary element injection is partial | Partial (M3) |
-| Code line ranges `[1|2-3]` | Supported via reveal highlight plugin | Planned (M3) |
-| Enter shows slide overview, Esc exits | Same reveal behaviour | Planned (M3) |
-| Print deck to PDF | Print view stacks all slides; browser print dialog | Substituted |
-| Background iframes | Disabled (security); static colour/image backgrounds supported | N/A (security) |
-| Full-screen native presentation | Browser fullscreen API; Esc exits | Substituted |
+| `---` on its own line separates slides | Same, outside fenced code and frontmatter | Done (M3) |
+| ⌘⌥P opens PPT | Ctrl/Cmd+Alt+P; also the toolbar button | Done (M3) |
+| Only notes with `---` can present | The toolbar button is always enabled; a note without separators presents as a single full-screen slide instead of being blocked | Superset (M3) |
+| Leading HTML comment config for Reveal | `transition`, `backgroundTransition`, `transitionSpeed`, `controls`, `progress`, `slideNumber` parsed from `key: value` comments, including nested dot keys; `history`/`hash` are forced off to protect the SPA router | Partial (M3) |
+| `.slide:` background directives | Same (`data-background` colours/gradients/images); iframe and local-video backgrounds are dropped | Done (M3) |
+| `.element:` fragments | Works for paragraphs and list items, including stacked attributes and authored fragment order; arbitrary element injection is not attempted | Partial (M3) |
+| Code line ranges `[1|2-3]` | Code is highlighted, but the range suffix is left in the info string and cannot advance line-by-line (reveal's highlight plugin is not bundled) | Partial (M3) |
+| Enter shows slide overview, Esc exits | Enter opens reveal's overview; Esc is captured first and closes the deck (second Esc would leave overview) | Substituted (M3) |
+| Print deck to PDF | “打印” adds a print stylesheet and opens the browser print dialog; all slides stack for “Save as PDF” | Substituted (M3) |
+| Background iframes | Dropped (privacy/security); colour and image backgrounds supported | N/A (security) |
+| Full-screen native presentation | Browser fullscreen API on the deck overlay; Esc exits fullscreen and the deck | Substituted (M3) |
 
 ## 10. Attachments and ingest
 
@@ -172,7 +182,7 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | Root-relative `/i/...` references | Same in Markdown; the Web resolver maps them to the note-relative `/api/notes/{id}/assets/...` endpoint | Done (M1) |
 | Path traversal / symlink escape | Asset names sanitised; resolved path must stay inside the note's `i`/`files` directory; symlinks rejected | Done (M1) |
 | Media cleanup for unused attachments | "Clean unused attachments" scans all note bodies before deleting; off by default | Planned (M5) |
-| Audio attachment playback | Inline player in preview | Planned (M3) |
+| Audio attachment playback | Inline player in preview | Done (M3) |
 | Video support | Not stored; audio extraction + transcript (optional ffmpeg) | Substituted |
 | OCR images | Optional local `tesseract` command, off by default, managed block or sidecar | Planned (M5) |
 | Whisper transcription | Optional local command, off by default, background job | Planned (M5) |
@@ -184,8 +194,9 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 |---|---|---|
 | Library is a user-picked folder | `MIAOYAN_LIBRARY` points at the folder; an existing MiaoYan tree is adopted in place, never rewritten on import | Done (M1) |
 | iCloud / WebDAV sync is external | The vault is a normal folder; external sync tools can be used; watcher catches changes | Substituted |
-| Export note (Markdown) | Byte-faithful `.md` download | Planned (M3) |
-| Export HTML | Self-contained HTML with inline CSS; local media embedded where possible | Planned (M3) |
+| Export note (Markdown) | Byte-faithful `.md` download | Done (M3) |
+| Export HTML | One standalone HTML file with inline CSS, KaTeX CSS, rendered diagrams and same-origin images inlined as data URLs; remote images stay remote; KaTeX font URLs point at the running app | Done (M3) |
+| Export PDF | A print window with the same standalone HTML, then the browser's “Save as PDF” dialog; no bundled Chromium | Substituted (M3) |
 | Export all | Zip of the vault (excluding `.miaoyan*` and state) | Planned (M5) |
 | Swap library folder | Settings -> vault path is fixed by env in v1 (single library); import wizard supports merging | Partial (v1) |
 
