@@ -71,7 +71,9 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 # 或：cd lazycat && npx --yes @lazycatcloud/lzc-cli@2.0.9 project build . -f lzc-build.yml
 ```
 
-产物为 `lazycat/*.lpk`。首次构建前可单独运行 `./scripts/verify-lazycat.sh` 做静态检查。
+产物为 `lazycat/*.lpk`。首次构建前可单独运行 `./scripts/verify-lazycat.sh` 做静态检查；
+发布前（已执行 `prepare-store-image.sh`）必须不用参数、严格通过。CI 在镜像占位符尚未替换时
+使用 `--allow-placeholder`，其余检查仍然会失败中断。
 
 ### 4. 本机安装测试
 

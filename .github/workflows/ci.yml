@@ -5,6 +5,10 @@ on:
     branches: [main, master]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,6 +36,8 @@ jobs:
       - name: Test server
         run: dotnet test Miaoyan.slnx --configuration Release --logger "console;verbosity=normal"
 
+      # The store image reference is rewritten by prepare-store-image.sh during
+      # publishing, so CI allows the repository placeholder but still fails on
+      # any other manifest/package regression.
       - name: LazyCat pre-flight
-        run: ./scripts/verify-lazycat.sh
-        continue-on-error: true
+        run: ./scripts/verify-lazycat.sh --allow-placeholder
