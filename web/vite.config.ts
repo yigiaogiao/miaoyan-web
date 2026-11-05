@@ -10,7 +10,8 @@ export default defineConfig({
   build: {
     outDir: fileURLToPath(new URL('../server/MiaoYan.Web/wwwroot', import.meta.url)),
     emptyOutDir: true,
-    sourcemap: true,
+    // Keep production packages small; the dev server still gives stack traces.
+    sourcemap: false,
   },
   server: {
     port: 5173,

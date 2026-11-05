@@ -1,5 +1,5 @@
 package: cloud.lazycat.app.miaoyanweb
-version: 0.1.0
+version: 0.1.1
 name: MiaoYan Web
 description: A self-hosted Markdown knowledge base inspired by MiaoYan, with plain .md files on your own device.
 author: MiaoYan Web contributors

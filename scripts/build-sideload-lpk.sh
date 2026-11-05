@@ -29,9 +29,11 @@ done
 
 echo "Publishing linux-x64 framework-dependent build..."
 rm -rf "${ROOT}/lazycat/publish"
+# CompressionEnabled=false skips the .gz/.br twins; they roughly double the
+# package and LazyCat's gateway can compress responses itself.
 "${DOTNET}" publish "${ROOT}/server/MiaoYan.Web/MiaoYan.Web.csproj" \
   -c Release -r linux-x64 --self-contained false \
-  -o "${ROOT}/lazycat/publish" -p:UseAppHost=false
+  -o "${ROOT}/lazycat/publish" -p:UseAppHost=false -p:CompressionEnabled=false
 
 if command -v lzc-cli >/dev/null 2>&1; then
   LZC=(lzc-cli)
