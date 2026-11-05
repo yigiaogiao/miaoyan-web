@@ -81,6 +81,11 @@ sudo chown -R 1000:1000 /srv/miaoyan
 - 书库自动定位到 `/lzcapp/documents/<uid>/MiaoYan`，状态到 `/lzcapp/var/miaoyan/<uid>`。
 - 镜像必须位于 `registry.lazycat.cloud` 才能过审。
 
+没有 Docker 但想先侧载试用时，可以运行 `./scripts/build-sideload-lpk.sh --copy-to-netdisk`：
+它把框架依赖发布物装进 LPK 的 `contentdir`，使用官方 ASP.NET 运行时镜像，无需构建或推送
+自定义镜像；该变体不包含 PlantUML/ffmpeg，且不能直接提交商店。详见
+[../lazycat/README.md](../lazycat/README.md)。
+
 上架前必须在真实懒猫容器里完成一次手工验收（本仓库的开发机没有容器运行时）：
 安装 `.lpk`，确认 `document.private` 实际挂在 `/lzcapp/documents/<uid>`、不用密码即可从网关
 进入、导入书库后能编辑和上传附件，再升级一次镜像确认笔记仍在。`scripts/verify-lazycat.sh`

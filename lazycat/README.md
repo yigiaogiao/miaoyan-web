@@ -75,6 +75,25 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 发布前（已执行 `prepare-store-image.sh`）必须不用参数、严格通过。CI 在镜像占位符尚未替换时
 使用 `--allow-placeholder`，其余检查仍然会失败中断。
 
+### 无 Docker 侧载包（自用）
+
+开发机没有 Docker 时，不必构建自定义镜像：把框架依赖发布物作为 `contentdir`，配合官方
+ASP.NET 运行时镜像即可打包。清单是 `lzc-manifest.sideload.yml`，应用文件安装后位于
+`/lzcapp/pkg/content`。
+
+```bash
+./scripts/build-sideload-lpk.sh --copy-to-netdisk
+```
+
+产物 `lazycat/cloud.lazycat.app.miaoyanweb-<version>.lpk` 会复制到懒猫网盘根目录
+`/lzcapp/document/`，在懒猫客户端里点击即可侧载安装。这个变体：
+
+- 不需要 Docker、不需要 `copy-image`，镜像地址是 `mcr.microsoft.com/dotnet/aspnet:10.0`；
+- **PlantUML 不可用**（基础镜像没有 JRE），也没有内置 ffmpeg/OCR/Whisper；Mermaid、Markmap、
+  KaTeX 和 PPT 仍在浏览器端正常工作；
+- 不能直接提交商店（镜像不在 `registry.lazycat.cloud`）；上架仍走上面的 Dockerfile +
+  `prepare-store-image.sh` 流程。
+
 ### 4. 本机安装测试
 
 ```bash

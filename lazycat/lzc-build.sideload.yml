@@ -1,0 +1,7 @@
+# Sideload build: no Docker required. Publish first with:
+#   dotnet publish server/MiaoYan.Web/MiaoYan.Web.csproj -c Release \
+#     -r linux-x64 --self-contained false -o lazycat/publish -p:UseAppHost=false
+manifest: ./lzc-manifest.sideload.yml
+pkgout: .
+icon: ./icon.png
+contentdir: ./publish

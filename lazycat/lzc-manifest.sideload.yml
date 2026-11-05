@@ -1,0 +1,53 @@
+# Sideload variant that needs no custom image build.
+#
+# The .NET app is published framework-dependently into ./publish and shipped as
+# the LPK content directory (mounted at /lzcapp/pkg/content). The official
+# ASP.NET runtime image supplies the runtime, so a machine without Docker can
+# still produce a working LPK. PlantUML is disabled because the base image has
+# no JRE; the full Dockerfile image keeps PlantUML and ffmpeg.
+application:
+  subdomain: miaoyan
+  routes:
+    - /=http://miaoyan.cloud.lazycat.app.miaoyanweb.lzcapp:5080
+  injects:
+    - id: miaoyan-revalidate-html
+      auth_required: false
+      on: response
+      when:
+        - /*
+      unless:
+        - /api
+        - /api*
+        - /media*
+        - /assets*
+        - /healthz
+      do: |
+        ctx.headers.set("Cache-Control", "no-cache, must-revalidate");
+
+services:
+  miaoyan:
+    image: mcr.microsoft.com/dotnet/aspnet:10.0
+    entrypoint: /usr/bin/dotnet
+    command:
+      - /lzcapp/pkg/content/MiaoYan.Web.dll
+    run_as: "1000:1000"
+    environment:
+      - ASPNETCORE_URLS=http://+:5080
+      # The published app lives in the content directory; without this the
+      # process starts from the image WORKDIR and cannot find wwwroot.
+      - ASPNETCORE_CONTENTROOT=/lzcapp/pkg/content
+      - DOTNET_EnableDiagnostics=0
+      - HOME=/tmp
+      - MIAOYAN_STATE_DIR=/lzcapp/var/miaoyan
+      - MIAOYAN_MAX_UPLOAD_MB=200
+      - MIAOYAN_PLANTUML_JAR=
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - exec 3<>/dev/tcp/127.0.0.1/5080
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3

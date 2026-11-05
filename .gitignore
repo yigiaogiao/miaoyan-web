@@ -20,6 +20,7 @@ data/
 dev-library/
 dev-state/
 artifacts/
+lazycat/publish/
 *.db
 *.db-wal
 *.db-shm
