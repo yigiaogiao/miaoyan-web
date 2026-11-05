@@ -68,6 +68,25 @@ const highlightStyle = HighlightStyle.define([
   { tag: tags.processingInstruction, color: 'var(--text-faint)' },
 ]);
 
+/** Fewer tags for notes past the editing gate; the parser still works. */
+const compactHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading1, fontSize: '1.4em', fontWeight: '650', color: 'var(--md-heading)' },
+  { tag: [tags.heading2, tags.heading3], fontWeight: '650', color: 'var(--md-heading)' },
+  { tag: tags.strong, fontWeight: '650', color: 'var(--md-strong)' },
+  { tag: tags.emphasis, fontStyle: 'italic' },
+  { tag: tags.monospace, fontFamily: 'var(--font-mono)', color: 'var(--md-code)' },
+]);
+
+function countNewlines(value: string): number {
+  let count = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) === 10) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 function selectedLines(view: EditorView): { from: number; to: number }[] {
   const state = view.state;
   const selection = state.selection.main;
@@ -248,6 +267,12 @@ function CodeEditorInner(
       return;
     }
 
+    // MiaoYan's large-note gates: past 1 MB drop the Markdown parser and
+    // highlighting; past 5000 lines keep a compact highlight and no `/` menu.
+    // The instance is created once, so this reflects the size at open time.
+    const hugeNote = value.length > 1_000_000;
+    const manyLines = !hugeNote && countNewlines(value) > 5000;
+
     const view = new EditorView({
       parent: hostRef.current,
       state: EditorState.create({
@@ -259,16 +284,20 @@ function CodeEditorInner(
           rectangularSelection(),
           bracketMatching(),
           closeBrackets(),
-          autocompletion({
-            override: [slashCompletionSource],
-            activateOnTyping: true,
-            icons: false,
-            defaultKeymap: true,
-          }),
+          ...(hugeNote
+            ? []
+            : [
+                autocompletion({
+                  override: manyLines ? [] : [slashCompletionSource],
+                  activateOnTyping: true,
+                  icons: false,
+                  defaultKeymap: true,
+                }),
+                markdown(),
+                syntaxHighlighting(manyLines ? compactHighlightStyle : highlightStyle),
+              ]),
           EditorState.allowMultipleSelections.of(true),
           EditorView.lineWrapping,
-          markdown(),
-          syntaxHighlighting(highlightStyle),
           placeholderExt(placeholder ?? '开始写点什么…'),
           EditorState.readOnly.of(readOnly),
           keymap.of([

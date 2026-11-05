@@ -35,9 +35,13 @@ export const MarkdownPreview = forwardRef(function MarkdownPreview(
   const theme = useResolvedTheme();
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
+  // Above 1 MB, skip highlight.js and automatic diagram rendering: parsing
+  // the note is unavoidable, but highlighting every fence is not.
+  const largeNote = content.length > 1_000_000;
+
   const html = useMemo(
-    () => renderMarkdown(content, noteId, linkTitles),
-    [content, noteId, linkTitles],
+    () => renderMarkdown(content, noteId, linkTitles, { skipHighlight: largeNote }),
+    [content, linkTitles, largeNote, noteId],
   );
 
   useImperativeHandle(ref, () => ({
@@ -83,12 +87,12 @@ export const MarkdownPreview = forwardRef(function MarkdownPreview(
   // service).
   useEffect(() => {
     const article = articleRef.current;
-    if (!article) {
+    if (!article || largeNote) {
       return;
     }
     const handles = renderDiagrams(article, theme);
     return () => handles.cancel();
-  }, [html, theme]);
+  }, [html, largeNote, theme]);
 
   // Copy buttons on code blocks.
   useEffect(() => {

@@ -294,12 +294,13 @@ md.renderer.rules.math_block = (tokens, idx) => {
 // preview mounts the rendered SVG after sanitisation. Everything else is
 // highlighted locally by highlight.js.
 
-md.renderer.rules.fence = (tokens, idx) => {
+md.renderer.rules.fence = (tokens, idx, _options, env) => {
   const token = tokens[idx];
   const info = token.info.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
   const code = token.content;
   const escaped = md.utils.escapeHtml(code);
   const line = token.map?.[0] ?? 0;
+  const skipHighlight = Boolean((env as { skipHighlight?: boolean } | undefined)?.skipHighlight);
 
   if (DIAGRAM_LANGUAGES.has(info)) {
     const kind = info === 'puml' ? 'plantuml' : info;
@@ -307,7 +308,7 @@ md.renderer.rules.fence = (tokens, idx) => {
   }
 
   const language = info && hljs.getLanguage(info) ? info : '';
-  const highlighted = language
+  const highlighted = language && !skipHighlight
     ? hljs.highlight(code, { language, ignoreIllegals: true }).value
     : escaped;
   return `<pre class="code-block" data-line="${line}"><code class="hljs${
@@ -495,9 +496,11 @@ export function renderMarkdown(
   content: string,
   noteId: string,
   linkTitles?: ReadonlySet<string>,
+  options?: { skipHighlight?: boolean },
 ): string {
   const html = md.render(stripFrontmatter(content), {
     noteId,
+    skipHighlight: options?.skipHighlight,
     linkTitles: linkTitles ? new Set([...linkTitles].map((title) => title.toLowerCase())) : undefined,
   });
   return sanitize(html);
