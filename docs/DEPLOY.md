@@ -6,7 +6,7 @@
 
 - `/` 与 `/note/*`：React SPA（静态文件，`index.html` 不缓存，`/assets` 带哈希长缓存）
 - `/api/*`：Web API 与 Papyra 兼容 API
-- `/media/*`：Papyra 媒体文件
+- `/api/media/*`：Papyra 媒体文件（图片另可用 `/api/notes/{id}/assets/i/*`）
 - `/healthz`：健康检查
 - `/api/events`：SSE（M1 起），反向代理需允许长连接
 
@@ -20,7 +20,7 @@
 | `MIAOYAN_STATE_DIR` | `/lzcapp/var/miaoyan` 或 `./data/.miaoyan-state` | 索引、版本、缓存；可重建，但版本历史在重建后丢失 |
 | `MIAOYAN_DEFAULT_UID` | 空 | 多用户设备上，给不带 `X-HC-User-ID` 的 API-key 请求指定用户 |
 | `MIAOYAN_WEB_PASSWORD` | 空 | 独立部署的网页密码（认证计划在 M5；当前预留） |
-| `MIAOYAN_API_KEY` | 空 | Papyra-ingest 等机器调用的密钥 |
+| `MIAOYAN_API_KEY` | 空 | Papyra-ingest 等机器调用的密钥；M4 接受 `X-API-Key` 但不校验，常量时间校验在 M5 完成 |
 | `MIAOYAN_MAX_UPLOAD_MB` | `100` | 单次上传上限，Kestrel 与 `MultipartReader` 共用 |
 | `MIAOYAN_PLANTUML_JAR` | `/opt/plantuml/plantuml.jar` | 镜像内已内置；设为空可禁用 |
 | `MIAOYAN_WHISPER_CMD` | 空 | 可选转写命令，如 `whisper --model small --output txt {input}` |

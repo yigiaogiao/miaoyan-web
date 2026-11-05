@@ -1,6 +1,6 @@
 # MiaoYan Web — Implementation Plan
 
-> Status: M3 complete (2026-11-05); M4 next. This file is the contract for the
+> Status: M4 complete (2026-11-05); M5 next. This file is the contract for the
 > project; update it when a decision changes, and keep `COMPATIBILITY.md` in sync
 > with user-visible behaviour.
 
@@ -532,12 +532,34 @@ PPT source HTML is sanitised, so authored inline `style` survives but scripts
 and event handlers do not. Word count/reading time and the smart typography
 command remain M5 polish.
 
-### M4 — Papyra compatibility and ingest
+### M4 — Papyra compatibility and ingest — **done 2026-11-05**
 
 Implement the API subset, media normalisation, ETag conflict retry. Acceptance:
 run real `papyra-ingest` with `PAPYRA_BASE_URL`/`PAPYRA_API_KEY` against X and
 Bilibili sources; create and update the same note; images/audio display;
 re-publishing does not duplicate notes.
+
+Landed: `GET /api/notes` now returns Papyra's full-note shape (the SPA opts into
+the cheap list with `?summary=1`); `GET /api/notes/{id}` accepts either the
+native path-hash id or the managed id in frontmatter; `PUT` accepts the Papyra
+payload `{title,tags,color,pinned,archived,body,kind}`, honours `If-Match`,
+creates missing notes, and keeps foreign frontmatter keys. Managed notes get an
+`id` alias, so a native rename/move does not break the next machine publish.
+Root media upload (`POST /api/media/upload`) is content-addressed, serves
+`GET/HEAD /api/media/{filename}`, and rewrites `/api/media/<name>` and
+`![[name]]` to `i/`/`files/` markdown; note asset resolution falls back to the
+library root. `categories.json` (state, disposable) backs
+`GET/POST/DELETE /api/categories`, unioned with tags parsed from notes.
+
+Verification: server suite 32/32 (26 previous + 6 Papyra tests: create/list,
+`If-Match` conflict, rename/move alias stability, media dedupe/HEAD/GET and
+traversal rejection, categories, foreign-frontmatter preservation). Typecheck
+and production build pass. Real `papyra-ingest` run against a local instance:
+text ingest created `text-acd4…` with a frontmatter id, an updated local image
+uploaded to `i/<name>-<hash>.jpg` (`uploaded:1`), a second publish reused the
+same file id and media (`reused:1`), and none of the republishes created a
+duplicate note. `COMPATIBILITY.md` records that hidden `archive=true` is stored
+in frontmatter but has no UI yet, and that API-key enforcement remains M5.
 
 ### M5 — optional features and release
 
@@ -582,3 +604,10 @@ checklist; installable `.lpk`; docs complete.
 | 2026-11-05 | Scroll sync writes/reads `data-source-line` anchors and uses a short source guard | Cheap, works with token maps, and stops the two panes from echoing each other |
 | 2026-11-05 | Markmap dark mode is driven by a `.markmap-dark` ancestor class | markmap-view selects its palette from that class, not from CSS variables |
 | 2026-11-05 | The `/` menu is a CodeMirror autocompletion source, not a custom popup | Keeps keyboard semantics (arrows, Enter, Escape) identical across desktop and mobile |
+| 2026-11-05 | Managed frontmatter is written only when the Papyra API creates/updates a note; imported and native notes stay untouched | Machine clients need an id that survives renames; ordinary Markdown files keep MiaoYan's "plain files" promise |
+| 2026-11-05 | The managed id is an alias in the snapshot; the path hash remains the primary id | The SPA contract and rename behaviour stay unchanged, while `GET/PUT /api/notes/<managed-id>` works after a move |
+| 2026-11-05 | Default `GET /api/notes` returns full bodies; the SPA asks for `?summary=1` | Papyra's list contract includes bodies; the native UI should not pay that cost on every library refresh |
+| 2026-11-05 | Root media is content-addressed (`<stem>-<sha256[..12]><ext>`) and looked up by hash | Re-publishing an article must not upload the same picture again; the hash also makes the write idempotent |
+| 2026-11-05 | Categories live in disposable `state/categories.json`, unioned with note tags | Papyra clients can register a tag before its first note; losing the file only loses colours |
+| 2026-11-05 | `/api/media` serves an allowlist of image/audio/video/document extensions and sets CSP `sandbox` | Uploaded HTML/SVG must not become a scripting origin inside the app |
+| 2026-11-05 | API-key enforcement is M5, not M4 | LazyCat's signed `X-HC-User-ID` gateway already isolates users; the compatibility endpoints must first be validated end to end. M5 adds a constant-time check for standalone deployments |

@@ -31,6 +31,20 @@ scroll sync, and Markdown/HTML/PDF export are implemented. Browser checks:
 stepping, speaker notes/zoom plugins, iframe backgrounds, and the fact that the
 exported HTML references KaTeX fonts at the app's absolute URL.
 
+**M4 status (2026-11-05):** the Papyra-compatible subset used by
+`papyra-ingest` is implemented and was exercised with the real client against a
+local instance. Notes created by the API carry a small managed frontmatter
+(id/title/tags/color/kind/archived/created/updated) whose id survives native
+renames and moves; foreign frontmatter keys are preserved. `GET /api/notes`
+returns full bodies (the SPA asks for `?summary=1`), `PUT` accepts
+`If-Match` and creates missing notes, and root media is content-addressed with
+`GET/HEAD /api/media/{filename}`. A real text ingest, a real image upload
+(`uploaded:1`, then `reused:1` on republish) and repeated publishes reused the
+same note id. Server suite 32/32. Remaining differences: `archived` has no
+native UI yet (stored and returned only), API-key enforcement is M5, and
+Papyra's `DELETE /api/categories?fromNotes=true` tag-stripping variant is not
+implemented (only the registry colour is removed).
+
 Reference sources: MiaoYan `README_CN.md`, `ARCHITECTURE.md`,
 `skills/miaoyan/SKILL.md`, `Resources/Initial/*.md`, `AGENTS.md`, and the
 relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
@@ -186,7 +200,7 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | Video support | Not stored; audio extraction + transcript (optional ffmpeg) | Substituted |
 | OCR images | Optional local `tesseract` command, off by default, managed block or sidecar | Planned (M5) |
 | Whisper transcription | Optional local command, off by default, background job | Planned (M5) |
-| URL/text ingestion (Papyra ecosystem) | Not built in; `papyra-ingest` works through the compatibility API | Planned (M4) |
+| URL/text ingestion (Papyra ecosystem) | Not built in; `papyra-ingest` works through the compatibility API, including local media uploads and repeated publishes | Done (M4) |
 
 ## 11. Import / export
 
@@ -204,19 +218,21 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 
 | Method | Path | Contract | Status |
 |---|---|---|---|
-| GET | `/api/notes` | `[{id,title,tags,updated,excerpt}]` | Planned (M4) |
-| GET | `/api/notes/{id}` | note + `ETag`; body excludes managed frontmatter | Planned (M4) |
-| PUT | `/api/notes/{id}` | `{title,tags,body,color,pinned,archived,kind}`; `If-Match`; 412/409 on stale; create if missing; `?archive=false` | Planned (M4) |
-| POST | `/api/media/upload` | multipart `file` -> `{filename}`; hash dedupe | Planned (M4) |
-| HEAD/GET | `/api/media/{filename}` | 200 / bytes | Planned (M4) |
-| GET | `/api/search?q=` | `[{id,title,snippet,score}]` | Planned (M4) |
-| POST | `/api/categories` | `{name}` -> idempotent tag registration | Planned (M4) |
-| GET | `/note/{id}` | SPA note route | Planned (M4) |
-| Auth | `X-API-Key` | Required when `MIAOYAN_API_KEY` is set | Planned (M4) |
+| GET | `/api/notes` | Full bodies plus `tags`, `color`, `kind`, `archived`, `updated`, `managedId`; `?summary=1` keeps the native cheap list | Done (M4) |
+| GET | `/api/notes/{id}` | Note + `ETag`; `body` excludes managed frontmatter, `content` stays byte-faithful for the native editor; id may be the path hash or the managed id | Done (M4) |
+| PUT | `/api/notes/{id}` | `{title,tags,body,color,pinned,archived,kind}`; `If-Match`; 412 on stale; create if missing; `?archive=false` is accepted (state is stored, not filtered) | Done (M4) |
+| POST | `/api/media/upload` | multipart `file` -> `{filename,kind,mime,size,version,url,markdown,…}`; SHA-256 content dedupe | Done (M4) |
+| HEAD/GET | `/api/media/{filename}` | 200 with length/type; bytes with Range; root, then project `i/`/`files/` fallback | Done (M4) |
+| GET | `/api/search?q=` | `[{id,title,snippet,score,…}]`; score descends with result order | Done (M4) |
+| POST | `/api/categories` | `{name,color}` idempotent upsert; GET unions registered tags with tags found in notes; DELETE removes the registry colour only | Done (M4) |
+| GET | `/note/{id}` | SPA note route; resolves native and managed ids through `GET /api/notes/{id}` | Done (M4) |
+| Auth | `X-API-Key` | Accepted but not enforced in M4; constant-time enforcement against `MIAOYAN_API_KEY` is M5. LazyCat's signed user gateway is the v1 isolation boundary | Partial (M5) |
 
-Acceptance: real `papyra-ingest` publishes an X post and a Bilibili video,
-updates the same note on re-publish, shows images/audio, and does not create
-duplicates.
+Acceptance: real `papyra-ingest` publishes text and a local image, updates the
+same note on re-publish, shows the uploaded image, and does not create
+duplicate notes. The real-client run was done with a text source and a local
+PNG; X/Bilibili network sources were not exercised here because they depend on
+external sites and credentials.
 
 ## 13. Keyboard shortcuts
 
