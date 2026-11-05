@@ -53,6 +53,7 @@ import { api, isConflictError } from '../api/client';
 import type { ConflictInfo, Note, ThemeMode, ViewMode } from '../api/types';
 import { exportHtml, exportMarkdown, exportPdf } from '../lib/export';
 import { tidyMarkdown } from '../lib/format';
+import { useI18n } from '../lib/i18n';
 import { extractHeadings } from '../lib/markdown';
 import { formatRelativeTime, isMod } from '../lib/utils';
 import { useToastStore } from '../store/toast';
@@ -75,10 +76,10 @@ interface Props {
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict';
 
-const THEME_ITEMS: { value: ThemeMode; label: string; icon: ReactNode }[] = [
-  { value: 'system', label: '跟随系统', icon: <Monitor size={14} /> },
-  { value: 'light', label: '浅色', icon: <Sun size={14} /> },
-  { value: 'dark', label: '深色', icon: <Moon size={14} /> },
+const THEME_ITEMS: { value: ThemeMode; key: string; icon: ReactNode }[] = [
+  { value: 'system', key: 'theme.system', icon: <Monitor size={14} /> },
+  { value: 'light', key: 'theme.light', icon: <Sun size={14} /> },
+  { value: 'dark', key: 'theme.dark', icon: <Moon size={14} /> },
 ];
 
 function countWords(content: string): number {
@@ -97,6 +98,8 @@ export function EditorPane({
   onPin,
   onDuplicate,
 }: Props) {
+  const { language, t, tn } = useI18n();
+  const setLanguage = useUiStore((state) => state.setLanguage);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const toast = useToastStore((state) => state.push);
@@ -302,13 +305,13 @@ export function EditorPane({
           setSaveState('conflict');
         } else {
           setSaveState('error');
-          toast(reason instanceof Error ? reason.message : '保存失败', 'error');
+          toast(reason instanceof Error ? reason.message : t('editor.saveFailed'), 'error');
         }
       } finally {
         savingRef.current = false;
       }
     },
-    [queryClient, toast],
+    [queryClient, toast, t],
   );
 
   useEffect(() => {
@@ -331,8 +334,8 @@ export function EditorPane({
   }, [content, externalUpdate, saveNow]);
 
   useEffect(() => {
-    document.title = note ? `${note.title} · 妙言 Web` : '妙言 Web';
-  }, [note?.title]);
+    document.title = note ? `${note.title} · ${t('brand')}` : t('brand');
+  }, [note?.title, t]);
 
   useEffect(
     () => () => {
@@ -403,12 +406,12 @@ export function EditorPane({
           }
         }
       } catch (reason) {
-        toast(reason instanceof Error ? reason.message : '附件上传失败', 'error');
+        toast(reason instanceof Error ? reason.message : t('editor.attachmentFailed'), 'error');
       } finally {
         setUploading((count) => Math.max(0, count - files.length));
       }
     },
-    [toast],
+    [toast, t],
   );
 
   const runMediaTool = useCallback(
@@ -422,23 +425,23 @@ export function EditorPane({
       try {
         const asset = await api.uploadAsset(current.id, file);
         const path = `${asset.kind === 'image' ? 'i' : 'files'}/${asset.name}`;
-        toast(kind === 'ocr' ? '正在识别图片…' : '正在转写音频…', 'info');
+        toast(kind === 'ocr' ? t('tools.ocrRunning') : t('tools.transcribeRunning'), 'info');
         const result =
           kind === 'ocr'
             ? await api.ocrAsset(current.id, path)
             : await api.transcribeAsset(current.id, path);
         if (!result.text) {
-          toast(kind === 'ocr' ? '图片里没有识别到文字' : '没有转写结果', 'error');
+          toast(kind === 'ocr' ? t('tools.ocrEmpty') : t('tools.transcribeEmpty'), 'error');
           return;
         }
 
         editorRef.current?.insertText(`${asset.markdown}\n\n${result.text}\n`);
-        toast(kind === 'ocr' ? '已插入识别文字' : '已插入转写文字', 'success');
+        toast(kind === 'ocr' ? t('tools.ocrDone') : t('tools.transcribeDone'), 'success');
       } catch (reason) {
-        toast(reason instanceof Error ? reason.message : '处理失败', 'error');
+        toast(reason instanceof Error ? reason.message : t('editor.processingFailed'), 'error');
       }
     },
-    [toast],
+    [toast, t],
   );
 
   const restoreFromDisk = useCallback(() => {
@@ -485,13 +488,13 @@ export function EditorPane({
           queryClient.invalidateQueries({ queryKey: ['projects'] }),
           queryClient.invalidateQueries({ queryKey: ['links'] }),
         ]);
-        toast(`已创建「${title}」`, 'success');
+        toast(t('editor.created', { title }), 'success');
         navigate(`/note/${created.id}`);
       } catch (reason) {
-        toast(reason instanceof Error ? reason.message : '创建笔记失败', 'error');
+        toast(reason instanceof Error ? reason.message : t('editor.createFailed'), 'error');
       }
     },
-    [linkTargets, navigate, queryClient, toast],
+    [linkTargets, navigate, queryClient, toast, t],
   );
 
   const handleVersionRestored = useCallback(
@@ -510,12 +513,12 @@ export function EditorPane({
   const handleTidy = useCallback(() => {
     const next = tidyMarkdown(contentRef.current);
     if (next === contentRef.current) {
-      toast('格式已经很整齐', 'success');
+      toast(t('editor.tidyAlready'), 'success');
       return;
     }
     editorRef.current?.replaceAll(next);
-    toast('已整理格式', 'success');
-  }, [toast]);
+    toast(t('editor.tidyDone'), 'success');
+  }, [toast, t]);
 
   const handleExportHtml = useCallback(async () => {
     const current = noteRef.current;
@@ -530,13 +533,13 @@ export function EditorPane({
         noteId: current.id,
         linkTitles,
       });
-      toast('已导出 HTML', 'success');
+      toast(t('editor.exportedHtml'), 'success');
     } catch (reason) {
-      toast(reason instanceof Error ? reason.message : '导出失败', 'error');
+      toast(reason instanceof Error ? reason.message : t('editor.exportFailed'), 'error');
     } finally {
       setExporting(false);
     }
-  }, [linkTitles, toast]);
+  }, [linkTitles, toast, t]);
 
   const handleExportPdf = useCallback(async () => {
     const current = noteRef.current;
@@ -556,11 +559,11 @@ export function EditorPane({
       });
     } catch (reason) {
       target?.close();
-      toast(reason instanceof Error ? reason.message : '导出 PDF 失败', 'error');
+      toast(reason instanceof Error ? reason.message : t('editor.exportPdfFailed'), 'error');
     } finally {
       setExporting(false);
     }
-  }, [linkTitles, toast]);
+  }, [linkTitles, toast, t]);
 
   if (isLoading) {
     return (
@@ -576,10 +579,10 @@ export function EditorPane({
         <div>
           <AlertTriangle className="mx-auto mb-3 text-[var(--danger)]" size={22} />
           <p className="text-sm text-[var(--text-muted)]">
-            {error instanceof Error ? error.message : '笔记不存在或已被移动'}
+            {error instanceof Error ? error.message : t('editor.noteMissing')}
           </p>
           <p className="mt-1 text-xs text-[var(--text-faint)]">
-            文件可能已在磁盘上被改名或删除，链接的旧地址已经失效。
+            {t('editor.noteMissingHint')}
           </p>
           <div className="mt-4 flex items-center justify-center gap-2">
             <button
@@ -587,14 +590,14 @@ export function EditorPane({
               onClick={() => void refetch()}
               className="rounded-lg border border-[var(--border-strong)] px-3 py-1.5 text-xs hover:bg-[var(--accent-soft)]"
             >
-              重试
+              {t('common.retry')}
             </button>
             <button
               type="button"
               onClick={() => navigate('/')}
               className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white"
             >
-              返回笔记列表
+              {t('editor.backToList')}
             </button>
           </div>
         </div>
@@ -603,11 +606,11 @@ export function EditorPane({
   }
 
   const statusLabel = {
-    saved: '已保存',
-    dirty: '未保存',
-    saving: '正在保存…',
-    error: '保存失败',
-    conflict: '有冲突',
+    saved: t('editor.saved'),
+    dirty: t('editor.dirty'),
+    saving: t('editor.saving'),
+    error: t('editor.error'),
+    conflict: t('editor.conflict'),
   }[saveState];
 
   return (
@@ -616,7 +619,7 @@ export function EditorPane({
         {!sidebarOpen && (
           <button
             type="button"
-            title="显示项目栏 (⌘1)"
+            title={t('editor.showSidebar')}
             onClick={toggleSidebar}
             className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
           >
@@ -626,7 +629,7 @@ export function EditorPane({
         {!listOpen && (
           <button
             type="button"
-            title="显示笔记列表 (⌘2)"
+            title={t('editor.showList')}
             onClick={toggleList}
             className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
           >
@@ -637,12 +640,12 @@ export function EditorPane({
         {focusMode && (
           <button
             type="button"
-            title="退出专注模式 (⌘⇧F)"
+            title={t('editor.exitFocus')}
             onClick={() => setFocusMode(false)}
             className="flex shrink-0 items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[11px] text-[var(--accent-strong)]"
           >
             <Focus size={13} />
-            专注
+            {t('editor.focus')}
           </button>
         )}
 
@@ -653,8 +656,8 @@ export function EditorPane({
             <span className="truncate font-medium text-[var(--text)]">{note.title}</span>
           </div>
           <div className="text-[11px] text-[var(--text-faint)]">
-            {formatRelativeTime(note.modifiedAt)} · {words} 字
-            {uploading > 0 && ` · 正在上传 ${uploading} 个附件`}
+            {formatRelativeTime(note.modifiedAt)} · {t('editor.words', { count: words })}
+            {uploading > 0 && ` · ${tn('editor.uploading', uploading)}`}
           </div>
         </div>
 
@@ -680,7 +683,7 @@ export function EditorPane({
         <div className="flex items-center rounded-lg bg-[var(--surface-sunken)] p-0.5">
           <button
             type="button"
-            title="仅编辑"
+            title={t('editor.modeEditor')}
             onClick={() => onViewMode('editor')}
             className={`rounded-md p-1.5 ${
               viewMode === 'editor'
@@ -692,7 +695,7 @@ export function EditorPane({
           </button>
           <button
             type="button"
-            title="分栏"
+            title={t('editor.modeSplit')}
             onClick={() => onViewMode('split')}
             className={`hidden rounded-md p-1.5 sm:block ${
               viewMode === 'split'
@@ -704,7 +707,7 @@ export function EditorPane({
           </button>
           <button
             type="button"
-            title="仅预览"
+            title={t('editor.modePreview')}
             onClick={() => onViewMode('preview')}
             className={`rounded-md p-1.5 ${
               viewMode === 'preview'
@@ -718,7 +721,7 @@ export function EditorPane({
 
         <button
           type="button"
-          title="大纲"
+          title={t('editor.outline')}
           onClick={() => {
             setOutlineOpen((value) => !value);
             setShowBacklinks(false);
@@ -734,7 +737,7 @@ export function EditorPane({
 
         <button
           type="button"
-          title="编辑设置"
+          title={t('editor.settings')}
           onClick={() => setSettingsOpen((value) => !value)}
           className={`rounded-lg p-1.5 ${
             settingsOpen
@@ -747,7 +750,7 @@ export function EditorPane({
 
         <button
           type="button"
-          title="演示文稿 (⌘⌥P)"
+          title={t('editor.presentation')}
           onClick={() => setPptOpen(true)}
           className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
         >
@@ -756,7 +759,7 @@ export function EditorPane({
 
         <button
           type="button"
-          title="反向链接"
+          title={t('editor.backlinks')}
           onClick={() => {
             setShowBacklinks((value) => !value);
             setOutlineOpen(false);
@@ -775,7 +778,9 @@ export function EditorPane({
           <DropdownMenu.Trigger asChild>
             <button
               type="button"
-              title={`主题：${THEME_ITEMS.find((item) => item.value === theme)?.label}`}
+              title={t('editor.theme', {
+                name: t(THEME_ITEMS.find((item) => item.value === theme)?.key ?? 'theme.system'),
+              })}
               className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
             >
               {theme === 'dark' ? <Moon size={15} /> : theme === 'light' ? <Sun size={15} /> : <Monitor size={15} />}
@@ -794,7 +799,7 @@ export function EditorPane({
                   className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
                 >
                   {item.icon}
-                  <span className="flex-1">{item.label}</span>
+                  <span className="flex-1">{t(item.key)}</span>
                   {theme === item.value && <Check size={13} className="text-[var(--accent)]" />}
                 </DropdownMenu.Item>
               ))}
@@ -806,7 +811,7 @@ export function EditorPane({
           <DropdownMenu.Trigger asChild>
             <button
               type="button"
-              title="更多操作"
+              title={t('editor.more')}
               className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
             >
               <MoreHorizontal size={16} />
@@ -822,77 +827,77 @@ export function EditorPane({
                 onSelect={() => onRename(note)}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
-                <Pencil size={13} /> 重命名
+                <Pencil size={13} /> {t('common.rename')}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => onPin(note, !note.pinned)}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
                 {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-                {note.pinned ? '取消置顶' : '置顶'}
+                {note.pinned ? t('notes.unpin') : t('notes.pin')}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => onDuplicate(note)}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
-                <Copy size={13} /> 创建副本
+                <Copy size={13} /> {t('notes.duplicate')}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => setVersionsOpen(true)}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
-                <History size={13} /> 版本历史
+                <History size={13} /> {t('editor.versions')}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => {
                   void navigator.clipboard
                     .writeText(contentRef.current)
-                    .then(() => toast('已复制 Markdown', 'success'))
-                    .catch(() => toast('复制失败', 'error'));
+                    .then(() => toast(t('editor.copyMarkdown'), 'success'))
+                    .catch(() => toast(t('editor.copyFailed'), 'error'));
                 }}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
-                <Copy size={13} /> 复制全文
+                <Copy size={13} /> {t('editor.copyAll')}
               </DropdownMenu.Item>
               <DropdownMenu.Separator className="my-1 h-px bg-[var(--border)]" />
               <DropdownMenu.Item
                 onSelect={() => ocrInputRef.current?.click()}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
-                <ScanText size={13} /> 图片文字识别
+                <ScanText size={13} /> {t('editor.ocr')}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => transcribeInputRef.current?.click()}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
-                <AudioLines size={13} /> 音频转写
+                <AudioLines size={13} /> {t('editor.transcribe')}
               </DropdownMenu.Item>
               <DropdownMenu.Separator className="my-1 h-px bg-[var(--border)]" />
               <DropdownMenu.Item
                 onSelect={() => exportMarkdown(note.title, contentRef.current)}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
-                <FileText size={13} /> 导出 Markdown
+                <FileText size={13} /> {t('editor.exportMarkdown')}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 disabled={exporting}
                 onSelect={() => void handleExportHtml()}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)] data-[disabled]:opacity-50"
               >
-                <FileCode2 size={13} /> 导出 HTML
+                <FileCode2 size={13} /> {t('editor.exportHtml')}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 disabled={exporting}
                 onSelect={() => void handleExportPdf()}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)] data-[disabled]:opacity-50"
               >
-                <Printer size={13} /> 打印 / 导出 PDF
+                <Printer size={13} /> {t('editor.exportPdf')}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => setDeleting(true)}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[var(--danger)] outline-none data-[highlighted]:bg-[var(--danger-soft)]"
               >
-                <Trash2 size={13} /> 删除笔记
+                <Trash2 size={13} /> {t('editor.deleteNote')}
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
@@ -901,93 +906,89 @@ export function EditorPane({
 
       {viewMode !== 'preview' && (
         <div className="format-bar flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface)] px-2">
-          <FormatButton title="一级标题" onClick={() => editorRef.current?.toggleHeading(1)}>
+          <FormatButton title={t('format.h1')} onClick={() => editorRef.current?.toggleHeading(1)}>
             <Heading1 size={15} />
           </FormatButton>
-          <FormatButton title="二级标题" onClick={() => editorRef.current?.toggleHeading(2)}>
+          <FormatButton title={t('format.h2')} onClick={() => editorRef.current?.toggleHeading(2)}>
             <Heading2 size={15} />
           </FormatButton>
-          <FormatButton title="三级标题" onClick={() => editorRef.current?.toggleHeading(3)}>
+          <FormatButton title={t('format.h3')} onClick={() => editorRef.current?.toggleHeading(3)}>
             <Heading3 size={15} />
           </FormatButton>
           <FormatDivider />
           <FormatButton
-            title="加粗"
-            onClick={() => editorRef.current?.wrapSelection('**', '**', '粗体')}
+            title={t('format.bold')}
+            onClick={() => editorRef.current?.wrapSelection('**', '**', t('format.boldText'))}
           >
             <Bold size={15} />
           </FormatButton>
           <FormatButton
-            title="斜体"
-            onClick={() => editorRef.current?.wrapSelection('*', '*', '斜体')}
+            title={t('format.italic')}
+            onClick={() => editorRef.current?.wrapSelection('*', '*', t('format.italicText'))}
           >
             <Italic size={15} />
           </FormatButton>
           <FormatButton
-            title="删除线"
-            onClick={() => editorRef.current?.wrapSelection('~~', '~~', '删除线')}
+            title={t('format.strike')}
+            onClick={() => editorRef.current?.wrapSelection('~~', '~~', t('format.strikeText'))}
           >
             <Strikethrough size={15} />
           </FormatButton>
           <FormatButton
-            title="行内代码"
-            onClick={() => editorRef.current?.wrapSelection('`', '`', '代码')}
+            title={t('format.code')}
+            onClick={() => editorRef.current?.wrapSelection('`', '`', t('format.codeText'))}
           >
             <Code2 size={15} />
           </FormatButton>
           <FormatButton
-            title="链接"
-            onClick={() => editorRef.current?.wrapSelection('[', '](https://)', '链接文字')}
+            title={t('format.link')}
+            onClick={() => editorRef.current?.wrapSelection('[', '](https://)', t('format.linkText'))}
           >
             <Link size={15} />
           </FormatButton>
           <FormatDivider />
-          <FormatButton title="引用" onClick={() => editorRef.current?.toggleLinePrefix('> ')}>
+          <FormatButton title={t('format.quote')} onClick={() => editorRef.current?.toggleLinePrefix('> ')}>
             <Quote size={15} />
           </FormatButton>
-          <FormatButton title="无序列表" onClick={() => editorRef.current?.toggleLinePrefix('- ')}>
+          <FormatButton title={t('format.ul')} onClick={() => editorRef.current?.toggleLinePrefix('- ')}>
             <List size={15} />
           </FormatButton>
           <FormatButton
-            title="有序列表"
+            title={t('format.ol')}
             onClick={() => editorRef.current?.toggleLinePrefix('1. ', true)}
           >
             <ListOrdered size={15} />
           </FormatButton>
           <FormatButton
-            title="待办事项"
+            title={t('format.todo')}
             onClick={() => editorRef.current?.toggleLinePrefix('- [ ] ')}
           >
             <ListTodo size={15} />
           </FormatButton>
           <FormatButton
-            title="表格"
-            onClick={() =>
-              editorRef.current?.insertText(
-                '\n| 列 1 | 列 2 | 列 3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |\n',
-              )
-            }
+            title={t('format.table')}
+            onClick={() => editorRef.current?.insertText(t('format.tableContent'))}
           >
             <Table2 size={15} />
           </FormatButton>
           <FormatButton
-            title="公式块"
+            title={t('format.math')}
             onClick={() => editorRef.current?.wrapSelection('$$\n', '\n$$', 'E = mc^2')}
           >
             <Sigma size={15} />
           </FormatButton>
           <FormatButton
-            title="分隔线"
+            title={t('format.divider')}
             onClick={() => editorRef.current?.insertText('\n---\n')}
           >
             <Minus size={15} />
           </FormatButton>
           <span className="flex-1" />
-          <FormatButton title="整理格式" onClick={handleTidy}>
+          <FormatButton title={t('format.tidy')} onClick={handleTidy}>
             <Wand2 size={15} />
           </FormatButton>
           <span className="hidden items-center gap-1 pr-1 text-[11px] text-[var(--text-faint)] md:flex">
-            输入 / 使用模板
+            {t('format.templates')}
           </span>
         </div>
       )}
@@ -995,13 +996,13 @@ export function EditorPane({
       {externalUpdate && (
         <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--warning-soft)] px-3 py-2 text-xs text-[var(--warning)]">
           <AlertTriangle size={13} />
-          <span className="flex-1">磁盘上的文件已在外部更新，你还有未保存的修改。</span>
+          <span className="flex-1">{t('editor.externalUpdate')}</span>
           <button
             type="button"
             onClick={restoreFromDisk}
             className="rounded-md border border-current/30 px-2 py-1 hover:bg-white/20"
           >
-            载入磁盘版本
+            {t('editor.loadDisk')}
           </button>
         </div>
       )}
@@ -1010,14 +1011,14 @@ export function EditorPane({
         <div className="absolute right-3 top-[58px] z-30 flex max-h-[62%] w-[min(92vw,370px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] shadow-2xl">
           <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2">
             <Link2 size={13} className="text-[var(--accent)]" />
-            <span className="text-xs font-semibold">反向链接</span>
+            <span className="text-xs font-semibold">{t('editor.backlinks')}</span>
             <span className="text-[11px] text-[var(--text-faint)]">
               {backlinksQuery.data?.length ?? 0}
             </span>
             <span className="flex-1" />
             <button
               type="button"
-              aria-label="关闭反向链接"
+              aria-label={t('editor.backlinks')}
               onClick={() => setShowBacklinks(false)}
               className="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text)]"
             >
@@ -1031,9 +1032,9 @@ export function EditorPane({
               </div>
             ) : (backlinksQuery.data?.length ?? 0) === 0 ? (
               <p className="px-3 py-6 text-center text-xs leading-relaxed text-[var(--text-faint)]">
-                还没有笔记链接到「{note.title}」。
+                {t('backlinks.empty', { title: note.title })}
                 <br />
-                在别处输入 <code className="rounded bg-[var(--surface-sunken)] px-1">[[{note.title}]]</code> 即可。
+                {t('backlinks.hint', { title: note.title })}
               </p>
             ) : (
               backlinksQuery.data!.map((backlink) => (
@@ -1049,7 +1050,7 @@ export function EditorPane({
                   <span className="flex items-center gap-1.5 text-xs font-medium">
                     <span className="truncate">{backlink.title}</span>
                     <span className="shrink-0 text-[10px] font-normal text-[var(--text-faint)]">
-                      {backlink.projectName} · 第 {backlink.line} 行
+                      {backlink.projectName} · {t('backlinks.line', { line: backlink.line })}
                     </span>
                   </span>
                   <span className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-[var(--text-muted)]">
@@ -1066,12 +1067,12 @@ export function EditorPane({
         <div className="absolute right-3 top-[58px] z-30 flex max-h-[62%] w-[min(92vw,320px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] shadow-2xl">
           <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2">
             <ListTree size={13} className="text-[var(--accent)]" />
-            <span className="text-xs font-semibold">大纲</span>
+            <span className="text-xs font-semibold">{t('editor.outline')}</span>
             <span className="text-[11px] text-[var(--text-faint)]">{headings.length}</span>
             <span className="flex-1" />
             <button
               type="button"
-              aria-label="关闭大纲"
+              aria-label={t('editor.outline')}
               onClick={() => setOutlineOpen(false)}
               className="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text)]"
             >
@@ -1081,7 +1082,7 @@ export function EditorPane({
           <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
             {headings.length === 0 ? (
               <p className="px-3 py-6 text-center text-xs text-[var(--text-faint)]">
-                这篇笔记还没有标题。用 <code className="rounded bg-[var(--surface-sunken)] px-1">#</code> 开头创建标题。
+                {t('outline.empty')}
               </p>
             ) : (
               headings.map((heading) => (
@@ -1108,18 +1109,18 @@ export function EditorPane({
         <>
           <button
             type="button"
-            aria-label="关闭编辑设置"
+            aria-label={t('editor.settings')}
             onClick={() => setSettingsOpen(false)}
             className="fixed inset-0 z-20 cursor-default"
           />
           <div className="absolute right-3 top-[58px] z-30 w-[min(92vw,290px)] rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3 shadow-2xl">
             <div className="mb-2 flex items-center gap-2">
               <Settings2 size={13} className="text-[var(--accent)]" />
-              <span className="text-xs font-semibold">编辑设置</span>
+              <span className="text-xs font-semibold">{t('editor.settings')}</span>
               <span className="flex-1" />
               <button
                 type="button"
-                aria-label="关闭编辑设置"
+                aria-label={t('editor.settings')}
                 onClick={() => setSettingsOpen(false)}
                 className="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text)]"
               >
@@ -1129,7 +1130,7 @@ export function EditorPane({
 
             <label className="flex cursor-pointer items-center justify-between rounded-lg px-1 py-1.5 text-xs">
               <span className="flex items-center gap-2">
-                <Focus size={13} /> 专注模式
+                <Focus size={13} /> {t('settings.focus')}
               </span>
               <input
                 type="checkbox"
@@ -1139,7 +1140,7 @@ export function EditorPane({
               />
             </label>
             <label className="flex cursor-pointer items-center justify-between rounded-lg px-1 py-1.5 text-xs">
-              <span>打字机模式</span>
+              <span>{t('settings.typewriter')}</span>
               <input
                 type="checkbox"
                 checked={typewriter}
@@ -1149,7 +1150,7 @@ export function EditorPane({
             </label>
 
             <SettingRange
-              label="字号"
+              label={t('settings.fontSize')}
               value={editorFontSize}
               min={12}
               max={22}
@@ -1158,7 +1159,7 @@ export function EditorPane({
               onChange={setEditorFontSize}
             />
             <SettingRange
-              label="行高"
+              label={t('settings.lineHeight')}
               value={editorLineHeight}
               min={1.4}
               max={2.4}
@@ -1166,7 +1167,7 @@ export function EditorPane({
               onChange={setEditorLineHeight}
             />
             <SettingRange
-              label="编辑区宽度"
+              label={t('settings.width')}
               value={editorWidth}
               min={600}
               max={1100}
@@ -1174,6 +1175,26 @@ export function EditorPane({
               suffix="px"
               onChange={setEditorWidth}
             />
+
+            <div className="mt-1 flex items-center justify-between rounded-lg px-1 py-1.5 text-xs">
+              <span className="text-[var(--text-muted)]">{t('settings.language')}</span>
+              <div className="flex items-center gap-1">
+                {(['zh', 'en'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setLanguage(value)}
+                    className={`rounded-md px-2 py-0.5 ${
+                      language === value
+                        ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent-strong)]'
+                        : 'text-[var(--text-faint)] hover:text-[var(--text)]'
+                    }`}
+                  >
+                    {t(value === 'zh' ? 'settings.zh' : 'settings.en')}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -1219,9 +1240,9 @@ export function EditorPane({
 
       <ConfirmDialog
         open={deleting}
-        title={`删除「${note.title}」？`}
-        description="笔记会移入回收站，可以随时恢复。"
-        confirmText="移入回收站"
+        title={t('delete.title', { title: note.title })}
+        description={t('delete.description')}
+        confirmText={t('delete.confirm')}
         onOpenChange={setDeleting}
         onConfirm={() => {
           deletingRef.current = true;
@@ -1359,6 +1380,7 @@ function ConflictDialog({
   onKeepMine: () => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div
       className={`fixed inset-0 z-40 grid place-items-center bg-black/30 px-4 ${
@@ -1378,9 +1400,9 @@ function ConflictDialog({
               <RotateCcw size={16} />
             </span>
             <div>
-              <h3 id="conflict-title" className="text-base font-semibold">文件已在磁盘上被修改</h3>
+              <h3 id="conflict-title" className="text-base font-semibold">{t('conflict.title')}</h3>
               <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-                保存时发现文件被其他程序改动。你的这份内容已自动备份到：
+                {t('conflict.description')}
                 <code className="mt-1 block break-all rounded bg-[var(--surface-sunken)] px-2 py-1 text-[11px]">
                   {conflict.conflictPath}
                 </code>
@@ -1393,21 +1415,21 @@ function ConflictDialog({
               onClick={onClose}
               className="rounded-lg px-3.5 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
             >
-              稍后处理
+              {t('conflict.later')}
             </button>
             <button
               type="button"
               onClick={onLoadDisk}
               className="rounded-lg border border-[var(--border-strong)] px-3.5 py-2 text-sm hover:bg-[var(--accent-soft)]"
             >
-              载入磁盘版本
+              {t('conflict.loadDisk')}
             </button>
             <button
               type="button"
               onClick={onKeepMine}
               className="rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-white"
             >
-              保留我的文本
+              {t('conflict.keepMine')}
             </button>
           </div>
         </div>

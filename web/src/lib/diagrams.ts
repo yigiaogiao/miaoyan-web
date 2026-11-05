@@ -1,4 +1,5 @@
 import DOMPurify from 'dompurify';
+import { t } from './i18n';
 
 const plantUmlCache = new Map<string, string>();
 let mermaidCounter = 0;
@@ -43,7 +44,7 @@ async function renderPlantUml(canvas: HTMLElement, source: string): Promise<void
   });
 
   if (!response.ok) {
-    let message = 'PlantUML 渲染失败';
+    let message = t('diagram.plantumlFailed');
     try {
       const body = (await response.json()) as { message?: string };
       if (body.message) {
@@ -128,7 +129,7 @@ export function renderDiagrams(
           return;
         }
         canvas.classList.add('diagram-error');
-        canvas.textContent = reason instanceof Error ? reason.message : '图表渲染失败';
+        canvas.textContent = reason instanceof Error ? reason.message : t('diagram.failed');
       }
     }
   })();

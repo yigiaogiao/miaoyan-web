@@ -2,10 +2,13 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { NoteSort, ThemeMode, ViewMode } from '../api/types';
 
+export type Language = 'zh' | 'en';
+
 interface UiState {
   selectedProjectId: string;
   viewMode: ViewMode;
   theme: ThemeMode;
+  language: Language;
   sort: NoteSort;
   sidebarOpen: boolean;
   listOpen: boolean;
@@ -20,6 +23,7 @@ interface UiState {
   setProject: (id: string) => void;
   setViewMode: (mode: ViewMode) => void;
   setTheme: (theme: ThemeMode) => void;
+  setLanguage: (language: Language) => void;
   setSort: (sort: NoteSort) => void;
   toggleSidebar: () => void;
   toggleList: () => void;
@@ -41,6 +45,7 @@ export const useUiStore = create<UiState>()(
       selectedProjectId: 'all',
       viewMode: 'split',
       theme: 'system',
+      language: 'zh',
       sort: 'modified',
       sidebarOpen: true,
       listOpen: true,
@@ -55,6 +60,7 @@ export const useUiStore = create<UiState>()(
       setProject: (id) => set({ selectedProjectId: id }),
       setViewMode: (viewMode) => set({ viewMode }),
       setTheme: (theme) => set({ theme }),
+      setLanguage: (language) => set({ language }),
       setSort: (sort) => set({ sort }),
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       toggleList: () => set((state) => ({ listOpen: !state.listOpen })),
@@ -75,6 +81,7 @@ export const useUiStore = create<UiState>()(
       partialize: (state) => ({
         viewMode: state.viewMode,
         theme: state.theme,
+        language: state.language,
         sort: state.sort,
         sidebarOpen: state.sidebarOpen,
         listOpen: state.listOpen,

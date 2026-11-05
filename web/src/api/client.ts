@@ -17,6 +17,7 @@ import type {
   TrashRestoreResult,
   VaultInfo,
 } from './types';
+import { t } from '../lib/i18n';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -57,7 +58,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(
       response.status,
       body?.error ?? 'request-failed',
-      body?.message ?? `请求失败 (${response.status})`,
+      body?.message ?? t('common.requestFailed', { status: response.status }),
       data,
     );
   }

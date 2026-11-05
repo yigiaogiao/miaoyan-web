@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useI18n } from '../lib/i18n';
 
 interface PromptDialogProps {
   open: boolean;
@@ -21,10 +22,11 @@ export function PromptDialog({
   label,
   initialValue = '',
   placeholder,
-  confirmText = '确定',
+  confirmText,
   onOpenChange,
   onSubmit,
 }: PromptDialogProps) {
+  const { t } = useI18n();
   const [value, setValue] = useState(initialValue);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export function PromptDialog({
       await onSubmit(value.trim());
       onOpenChange(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '操作失败');
+      setError(reason instanceof Error ? reason.message : t('common.operationFailed'));
     } finally {
       setBusy(false);
     }
@@ -73,7 +75,7 @@ export function PromptDialog({
               <button
                 type="button"
                 className="rounded-md p-1 text-[var(--text-faint)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
-                aria-label="关闭"
+                aria-label={t('common.close')}
               >
                 <X size={16} />
               </button>
@@ -104,7 +106,7 @@ export function PromptDialog({
                   type="button"
                   className="rounded-lg px-3.5 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
                 >
-                  取消
+                  {t('common.cancel')}
                 </button>
               </Dialog.Close>
               <button
@@ -113,7 +115,7 @@ export function PromptDialog({
                 className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 {busy && <Loader2 size={14} className="animate-spin" />}
-                {confirmText}
+                {confirmText ?? t('common.confirm')}
               </button>
             </div>
           </form>
@@ -137,11 +139,12 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmText = '确定',
+  confirmText,
   tone = 'danger',
   onOpenChange,
   onConfirm,
 }: ConfirmDialogProps) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,7 +166,7 @@ export function ConfirmDialog({
       await onConfirm();
       onOpenChange(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '操作失败');
+      setError(reason instanceof Error ? reason.message : t('common.operationFailed'));
     } finally {
       setBusy(false);
     }
@@ -204,7 +207,7 @@ export function ConfirmDialog({
                 type="button"
                 className="rounded-lg px-3.5 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
               >
-                取消
+                {t('common.cancel')}
               </button>
             </Dialog.Close>
             <button
@@ -218,7 +221,7 @@ export function ConfirmDialog({
               }
             >
               {busy && <Loader2 size={14} className="animate-spin" />}
-              {confirmText}
+              {confirmText ?? t('common.confirm')}
             </button>
           </div>
         </Dialog.Content>

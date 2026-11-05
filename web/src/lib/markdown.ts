@@ -29,6 +29,7 @@ import MarkdownIt from 'markdown-it';
 import type { StateBlock, StateCore, StateInline } from 'markdown-it';
 import footnote from 'markdown-it-footnote';
 import { assetUrl } from '../api/client';
+import { t } from './i18n';
 import { isAudioPath } from './utils';
 
 const LANGUAGES: [string, Parameters<typeof hljs.registerLanguage>[1], string[]?][] = [
@@ -109,7 +110,7 @@ md.renderer.rules.image = (tokens, idx, options, env, self) => {
 
   const resolved = rewriteSource(source, noteId);
   if (isAudioPath(source)) {
-    const label = md.utils.escapeHtml(token.content || '音频');
+    const label = md.utils.escapeHtml(token.content || t('markdown.audio'));
     return `<audio controls preload="metadata" src="${md.utils.escapeHtml(resolved)}" aria-label="${label}"></audio>`;
   }
 
@@ -165,7 +166,7 @@ md.renderer.rules.wikilink = (tokens, idx, _options, env) => {
   const resolved = titles?.has(title.toLowerCase()) ?? true;
   const escaped = md.utils.escapeHtml(title);
   return `<a href="#" class="wikilink${resolved ? '' : ' wikilink-unresolved'}" data-wikilink="${escaped}" title="${
-    resolved ? `打开 ${escaped}` : `创建 ${escaped}`
+    resolved ? t('markdown.open', { title: escaped }) : t('markdown.create', { title: escaped })
   }">${escaped}</a>`;
 };
 

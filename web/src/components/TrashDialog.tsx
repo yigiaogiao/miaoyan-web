@@ -4,6 +4,7 @@ import { Loader2, RotateCcw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api/client';
 import type { TrashEntry, TrashRestoreResult } from '../api/types';
+import { useI18n } from '../lib/i18n';
 import { formatBytes, formatRelativeTime } from '../lib/utils';
 import { useToastStore } from '../store/toast';
 import { ConfirmDialog } from './Dialogs';
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function TrashDialog({ open, onOpenChange, onRestored }: Props) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToastStore((state) => state.push);
   const [purging, setPurging] = useState<TrashEntry | null>(null);
@@ -36,9 +38,9 @@ export function TrashDialog({ open, onOpenChange, onRestored }: Props) {
         queryClient.invalidateQueries({ queryKey: ['projects'] }),
       ]);
       onRestored(result);
-      toast(entry.kind === 'project' ? '项目已恢复' : '笔记已恢复', 'success');
+      toast(entry.kind === 'project' ? t('trash.projectRestored') : t('trash.noteRestored'), 'success');
     } catch (reason) {
-      toast(reason instanceof Error ? reason.message : '恢复失败', 'error');
+      toast(reason instanceof Error ? reason.message : t('trash.restoreFailed'), 'error');
     } finally {
       setBusyId(null);
     }
@@ -57,17 +59,17 @@ export function TrashDialog({ open, onOpenChange, onRestored }: Props) {
           <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-6 py-4">
             <div>
               <Dialog.Title className="flex items-center gap-2 text-base font-semibold">
-                <Trash2 size={16} /> 回收站
+                <Trash2 size={16} /> {t('trash.title')}
               </Dialog.Title>
               <Dialog.Description className="mt-0.5 text-sm text-[var(--text-muted)]">
-                删除的笔记和项目会保留在这里，直到手动清除。
+                {t('trash.description')}
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
                 type="button"
                 className="rounded-md p-1 text-[var(--text-faint)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
-                aria-label="关闭"
+                aria-label={t('common.close')}
               >
                 <X size={16} />
               </button>
@@ -81,7 +83,7 @@ export function TrashDialog({ open, onOpenChange, onRestored }: Props) {
               </div>
             ) : (entries?.length ?? 0) === 0 ? (
               <div className="grid place-items-center py-16 text-sm text-[var(--text-faint)]">
-                回收站是空的。
+                {t('trash.empty')}
               </div>
             ) : (
               <ul className="space-y-1">
@@ -111,13 +113,13 @@ export function TrashDialog({ open, onOpenChange, onRestored }: Props) {
                       ) : (
                         <RotateCcw size={12} />
                       )}
-                      恢复
+                      {t('trash.restore')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setPurging(entry)}
                       className="rounded-lg p-1.5 text-[var(--text-faint)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-                      title="永久删除"
+                      title={t('trash.purge')}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -131,9 +133,9 @@ export function TrashDialog({ open, onOpenChange, onRestored }: Props) {
 
       <ConfirmDialog
         open={purging !== null}
-        title={`永久删除「${purging?.title ?? ''}」？`}
-        description="该操作无法撤销，文件会从磁盘上彻底移除。"
-        confirmText="永久删除"
+        title={t('trash.purgeTitle', { title: purging?.title ?? '' })}
+        description={t('trash.purgeDescription')}
+        confirmText={t('trash.purgeConfirm')}
         onOpenChange={(next) => !next && setPurging(null)}
         onConfirm={async () => {
           if (purging) {

@@ -2,6 +2,7 @@ import { Maximize, Printer, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { RevealConfig } from 'reveal.js';
 import { renderDiagrams } from '../lib/diagrams';
+import { useI18n } from '../lib/i18n';
 import { applySlideElements, buildDeck } from '../lib/ppt';
 import { useResolvedTheme } from '../lib/theme';
 import 'reveal.js/reveal.css';
@@ -68,6 +69,7 @@ export function PptView({
   onWikilink,
   onClose,
 }: Props) {
+  const { t } = useI18n();
   const theme = useResolvedTheme();
   const hostRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -139,7 +141,7 @@ export function PptView({
       }
       setReady(true);
     }).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : '演示文稿初始化失败');
+      setError(reason instanceof Error ? reason.message : t('ppt.initFailed'));
     });
 
     return () => {
@@ -151,7 +153,7 @@ export function PptView({
         // Already torn down.
       }
     };
-  }, [deck, theme]);
+  }, [deck, theme, t]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -187,17 +189,17 @@ export function PptView({
       className="ppt-overlay fixed inset-0 z-[60] flex flex-col bg-[var(--bg)]"
       role="dialog"
       aria-modal="true"
-      aria-label={`演示：${title}`}
+      aria-label={t('ppt.label', { title })}
     >
       <div className="ppt-toolbar flex h-11 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3">
         <span className="truncate text-xs font-medium">{title}</span>
         <span className="text-[11px] text-[var(--text-faint)]">
-          {deck.slides.length} 页 · {deck.separators} 个分隔符
+          {t('ppt.pages', { slides: deck.slides.length, separators: deck.separators })}
         </span>
         <span className="flex-1" />
         <button
           type="button"
-          title="全屏"
+          title={t('ppt.fullscreen')}
           onClick={() => {
             void overlayRef.current?.requestFullscreen?.().catch(() => undefined);
           }}
@@ -207,7 +209,7 @@ export function PptView({
         </button>
         <button
           type="button"
-          title="打印 / 导出 PDF"
+          title={t('ppt.print')}
           onClick={() => window.print()}
           className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
         >
@@ -215,7 +217,7 @@ export function PptView({
         </button>
         <button
           type="button"
-          title="退出演示 (Esc)"
+          title={t('ppt.exit')}
           onClick={onClose}
           className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
         >
@@ -227,7 +229,7 @@ export function PptView({
         <div ref={hostRef} onClick={onClick} className="h-full" />
         {!ready && !error && (
           <div className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-[var(--text-faint)]">
-            正在准备演示…
+            {t('ppt.preparing')}
           </div>
         )}
         {error && (

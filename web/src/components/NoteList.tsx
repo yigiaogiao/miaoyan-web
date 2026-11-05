@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { NoteSort, NoteSummary } from '../api/types';
+import { useI18n } from '../lib/i18n';
 import { formatRelativeTime } from '../lib/utils';
 import { ConfirmDialog, PromptDialog } from './Dialogs';
 
@@ -35,11 +36,13 @@ interface Props {
   onDuplicate: (note: NoteSummary) => Promise<void>;
 }
 
-const SORT_ITEMS: { value: NoteSort; label: string }[] = [
-  { value: 'modified', label: '修改时间' },
-  { value: 'created', label: '创建时间' },
-  { value: 'title', label: '标题' },
-];
+const SORT_KEYS: Record<NoteSort, string> = {
+  modified: 'notes.sortModified',
+  created: 'notes.sortCreated',
+  title: 'notes.sortTitle',
+};
+
+const SORT_ITEMS: NoteSort[] = ['modified', 'created', 'title'];
 
 const ROW_HEIGHT = 86;
 
@@ -58,6 +61,7 @@ export function NoteList({
   onPin,
   onDuplicate,
 }: Props) {
+  const { t } = useI18n();
   const parentRef = useRef<HTMLDivElement>(null);
   const [renaming, setRenaming] = useState<NoteSummary | null>(null);
   const [deleting, setDeleting] = useState<NoteSummary | null>(null);
@@ -82,7 +86,7 @@ export function NoteList({
       <div className="space-y-2.5 px-3 pb-2 pt-3.5">
         <div className="flex items-center justify-between">
           <h2 className="text-[13px] font-semibold text-[var(--text)]">
-            笔记
+            {t('notes.title')}
             <span className="ml-1.5 font-normal text-[var(--text-faint)]">
               {notes?.length ?? 0}
             </span>
@@ -92,7 +96,7 @@ export function NoteList({
               <DropdownMenu.Trigger asChild>
                 <button
                   type="button"
-                  title={`排序：${SORT_ITEMS.find((item) => item.value === sort)?.label}`}
+                  title={t('notes.sort', { name: t(SORT_KEYS[sort]) })}
                   className="grid size-7 place-items-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
                 >
                   <ArrowUpDown size={14} />
@@ -106,12 +110,12 @@ export function NoteList({
                 >
                   {SORT_ITEMS.map((item) => (
                     <DropdownMenu.Item
-                      key={item.value}
-                      onSelect={() => onSort(item.value)}
+                      key={item}
+                      onSelect={() => onSort(item)}
                       className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
                     >
-                      <span className="flex-1">{item.label}</span>
-                      {sort === item.value && (
+                      <span className="flex-1">{t(SORT_KEYS[item])}</span>
+                      {sort === item && (
                         <Check size={13} className="text-[var(--accent)]" />
                       )}
                     </DropdownMenu.Item>
@@ -121,7 +125,7 @@ export function NoteList({
             </DropdownMenu.Root>
             <button
               type="button"
-              title="新建笔记 (⌘N)"
+              title={t('notes.new')}
               onClick={() => void onCreate()}
               className="grid size-7 place-items-center rounded-lg bg-[var(--accent)] text-white shadow-sm hover:brightness-105"
             >
@@ -138,7 +142,7 @@ export function NoteList({
           <input
             value={search}
             onChange={(event) => onSearch(event.target.value)}
-            placeholder="搜索标题或内容"
+            placeholder={t('notes.search')}
             className="w-full rounded-lg border border-transparent bg-[var(--surface-sunken)] py-1.5 pl-8 pr-7 text-[13px] outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]"
           />
           {search && (
@@ -146,7 +150,7 @@ export function NoteList({
               type="button"
               onClick={() => onSearch('')}
               className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text)]"
-              aria-label="清除搜索"
+              aria-label={t('notes.clearSearch')}
             >
               <X size={13} />
             </button>
@@ -166,7 +170,7 @@ export function NoteList({
           </div>
         ) : (notes?.length ?? 0) === 0 ? (
           <div className="px-4 py-10 text-center text-[13px] leading-relaxed text-[var(--text-faint)]">
-            {search ? '没有匹配的笔记。' : '这里还没有笔记，点击 + 新建。'}
+            {search ? t('notes.emptySearch') : t('notes.empty')}
           </div>
         ) : (
           <div
@@ -188,7 +192,7 @@ export function NoteList({
                     role="button"
                     tabIndex={0}
                     draggable
-                    title="拖动到左侧项目可移动笔记"
+                    title={t('notes.moveHint')}
                     onDragStart={(event) => {
                       event.dataTransfer.setData('application/x-miaoyan-note', note.id);
                       event.dataTransfer.effectAllowed = 'move';
@@ -226,11 +230,11 @@ export function NoteList({
                           <span className="truncate">{note.title}</span>
                         </div>
                         <p className="mt-0.5 line-clamp-2 text-[12px] leading-[1.5] text-[var(--text-muted)]">
-                          {note.excerpt || '空白笔记'}
+                          {note.excerpt || t('notes.blank')}
                         </p>
                         <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--text-faint)]">
                           <span>{formatRelativeTime(note.modifiedAt)}</span>
-                          {note.projectName && note.projectName !== '未分类' && (
+                          {note.projectId !== 'root' && note.projectName && (
                             <>
                               <span>·</span>
                               <span className="truncate">{note.projectName}</span>
@@ -244,7 +248,7 @@ export function NoteList({
                       <DropdownMenu.Trigger asChild>
                         <button
                           type="button"
-                          aria-label={`${note.title} 的操作`}
+                          aria-label={t('notes.actions', { title: note.title })}
                           onClick={(event) => event.stopPropagation()}
                           className="absolute right-2 top-2 hidden rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)] group-hover:block data-[state=open]:block"
                         >
@@ -262,25 +266,25 @@ export function NoteList({
                             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
                           >
                             {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-                            {note.pinned ? '取消置顶' : '置顶'}
+                            {note.pinned ? t('notes.unpin') : t('notes.pin')}
                           </DropdownMenu.Item>
                           <DropdownMenu.Item
                             onSelect={() => void onDuplicate(note)}
                             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
                           >
-                            <Copy size={13} /> 创建副本
+                            <Copy size={13} /> {t('notes.duplicate')}
                           </DropdownMenu.Item>
                           <DropdownMenu.Item
                             onSelect={() => setRenaming(note)}
                             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
                           >
-                            <Pencil size={13} /> 重命名
+                            <Pencil size={13} /> {t('common.rename')}
                           </DropdownMenu.Item>
                           <DropdownMenu.Item
                             onSelect={() => setDeleting(note)}
                             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[var(--danger)] outline-none data-[highlighted]:bg-[var(--danger-soft)]"
                           >
-                            <Trash2 size={13} /> 删除
+                            <Trash2 size={13} /> {t('common.delete')}
                           </DropdownMenu.Item>
                         </DropdownMenu.Content>
                       </DropdownMenu.Portal>
@@ -295,10 +299,10 @@ export function NoteList({
 
       <PromptDialog
         open={renaming !== null}
-        title="重命名笔记"
-        label="标题"
+        title={t('notes.renameTitle')}
+        label={t('notes.titleLabel')}
         initialValue={renaming?.title ?? ''}
-        confirmText="保存"
+        confirmText={t('common.save')}
         onOpenChange={(open) => !open && setRenaming(null)}
         onSubmit={async (value) => {
           if (renaming) {
@@ -309,9 +313,9 @@ export function NoteList({
 
       <ConfirmDialog
         open={deleting !== null}
-        title={`删除「${deleting?.title ?? ''}」？`}
-        description="笔记会移入回收站，可以随时恢复。"
-        confirmText="移入回收站"
+        title={t('notes.deleteTitle', { title: deleting?.title ?? '' })}
+        description={t('notes.deleteDescription')}
+        confirmText={t('notes.moveToTrash')}
         onOpenChange={(open) => !open && setDeleting(null)}
         onConfirm={async () => {
           if (deleting) {

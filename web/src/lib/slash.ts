@@ -1,5 +1,6 @@
 import type { CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import type { EditorView } from '@codemirror/view';
+import { t } from './i18n';
 
 interface SlashTemplate {
   key: string;
@@ -10,70 +11,71 @@ interface SlashTemplate {
   cursor?: number;
 }
 
-const today = new Date().toISOString().slice(0, 10);
-
-export const SLASH_TEMPLATES: SlashTemplate[] = [
-  { key: 'h1', label: '标题 1', detail: '# 标题', insert: '# ' },
-  { key: 'h2', label: '标题 2', detail: '## 标题', insert: '## ' },
-  { key: 'h3', label: '标题 3', detail: '### 标题', insert: '### ' },
-  { key: 'ul', label: '无序列表', detail: '- 列表项', insert: '- ' },
-  { key: 'ol', label: '有序列表', detail: '1. 列表项', insert: '1. ' },
-  { key: 'todo', label: '待办事项', detail: '- [ ] 任务', insert: '- [ ] ' },
-  { key: 'quote', label: '引用', detail: '> 引用', insert: '> ' },
-  {
-    key: 'code',
-    label: '代码块',
-    detail: '```language',
-    insert: '```\n\n```\n',
-    cursor: 4,
-  },
-  {
-    key: 'math',
-    label: '公式块',
-    detail: '$$ … $$',
-    insert: '$$\n\n$$\n',
-    cursor: 3,
-  },
-  {
-    key: 'table',
-    label: '表格',
-    detail: '3 × 2 表格',
-    insert: '| 列 1 | 列 2 | 列 3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |\n',
-  },
-  {
-    key: 'mermaid',
-    label: 'Mermaid 图表',
-    detail: '```mermaid',
-    insert: '```mermaid\ngraph LR\n  A[开始] --> B[结束]\n```\n',
-  },
-  {
-    key: 'markmap',
-    label: '思维导图',
-    detail: '```markmap',
-    insert: '```markmap\n# 中心主题\n## 分支一\n## 分支二\n```\n',
-  },
-  {
-    key: 'alert',
-    label: '提示框',
-    detail: '> [!NOTE]',
-    insert: '> [!NOTE]\n> ',
-  },
-  {
-    key: 'ppt',
-    label: 'PPT 分页',
-    detail: '--- 新的一页',
-    insert: '---\n\n## 新的一页\n\n',
-  },
-  { key: 'divider', label: '分隔线', detail: '---', insert: '---\n' },
-  { key: 'date', label: '今天日期', detail: today, insert: today },
-  {
-    key: 'link',
-    label: '双链笔记',
-    detail: '[[笔记标题]]',
-    insert: '[[]]',
-    cursor: 2,
-  },
-];
+function templates(): SlashTemplate[] {
+  const today = new Date().toISOString().slice(0, 10);
+  return [
+    { key: 'h1', label: t('slash.h1'), detail: '# ', insert: '# ' },
+    { key: 'h2', label: t('slash.h2'), detail: '## ', insert: '## ' },
+    { key: 'h3', label: t('slash.h3'), detail: '### ', insert: '### ' },
+    { key: 'ul', label: t('slash.ul'), detail: '- ', insert: '- ' },
+    { key: 'ol', label: t('slash.ol'), detail: '1. ', insert: '1. ' },
+    { key: 'todo', label: t('slash.todo'), detail: '- [ ] ', insert: '- [ ] ' },
+    { key: 'quote', label: t('slash.quote'), detail: '> ', insert: '> ' },
+    {
+      key: 'code',
+      label: t('slash.code'),
+      detail: '```language',
+      insert: '```\n\n```\n',
+      cursor: 4,
+    },
+    {
+      key: 'math',
+      label: t('slash.math'),
+      detail: '$$ … $$',
+      insert: '$$\n\n$$\n',
+      cursor: 3,
+    },
+    {
+      key: 'table',
+      label: t('slash.table'),
+      detail: t('slash.tableDetail'),
+      insert: t('slash.tableContent'),
+    },
+    {
+      key: 'mermaid',
+      label: t('slash.mermaid'),
+      detail: '```mermaid',
+      insert: t('slash.mermaidContent'),
+    },
+    {
+      key: 'markmap',
+      label: t('slash.markmap'),
+      detail: '```markmap',
+      insert: t('slash.markmapContent'),
+    },
+    {
+      key: 'alert',
+      label: t('slash.alert'),
+      detail: '> [!NOTE]',
+      insert: '> [!NOTE]\n> ',
+    },
+    {
+      key: 'ppt',
+      label: t('slash.ppt'),
+      detail: t('slash.pptDetail'),
+      insert: t('slash.pptContent'),
+    },
+    { key: 'divider', label: t('slash.divider'), detail: '---', insert: '---\n' },
+    { key: 'date', label: t('slash.date'), detail: today, insert: today },
+    {
+      key: 'link',
+      label: t('slash.link'),
+      detail: '[[…]]',
+      insert: '[[]]',
+      cursor: 2,
+    },
+  ];
+}
 
 /**
  * Slash menu at the start of the current line: typing `/` lists the templates
@@ -91,7 +93,7 @@ export function slashCompletionSource(context: CompletionContext): CompletionRes
   return {
     from,
     validFor: /^\/[\p{L}\w]*$/u,
-    options: SLASH_TEMPLATES.map((template) => ({
+    options: templates().map((template) => ({
       label: `/${template.key}`,
       detail: template.label,
       info: template.detail,

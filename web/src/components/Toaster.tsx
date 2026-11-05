@@ -1,7 +1,9 @@
 import { AlertTriangle, Check, Info, X } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 import { useToastStore } from '../store/toast';
 
 export function Toaster() {
+  const { t } = useI18n();
   const toasts = useToastStore((state) => state.toasts);
   const dismiss = useToastStore((state) => state.dismiss);
 
@@ -26,7 +28,7 @@ export function Toaster() {
             type="button"
             onClick={() => dismiss(toast.id)}
             className="rounded p-0.5 text-[var(--text-faint)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
-            aria-label="关闭"
+            aria-label={t('common.close')}
           >
             <X size={14} />
           </button>

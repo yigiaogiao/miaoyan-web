@@ -2,6 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Feather, FolderPlus, Layers, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import type { Project } from '../api/types';
+import { useI18n } from '../lib/i18n';
 import { useUiStore } from '../store/ui';
 import { ConfirmDialog, PromptDialog } from './Dialogs';
 
@@ -96,6 +97,7 @@ export function ProjectSidebar({
   onOpenTrash,
   onMoveNote,
 }: Props) {
+  const { t } = useI18n();
   const selectedProjectId = useUiStore((state) => state.selectedProjectId);
   const setProject = useUiStore((state) => state.setProject);
   const projectCreateRequest = useUiStore((state) => state.projectCreateRequest);
@@ -121,16 +123,16 @@ export function ProjectSidebar({
         <span className="grid size-7 place-items-center rounded-lg bg-[var(--accent)] text-white">
           <Feather size={14} strokeWidth={2} />
         </span>
-        <span className="text-[13.5px] font-semibold tracking-tight">妙言 Web</span>
+        <span className="text-[13.5px] font-semibold tracking-tight">{t('brand')}</span>
       </div>
 
       <div className="flex items-center justify-between px-3.5 pb-2 pt-3.5">
         <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">
-          书库
+          {t('sidebar.library')}
         </span>
         <button
           type="button"
-          title="新建项目"
+          title={t('sidebar.newProject')}
           onClick={() => setCreating(true)}
           className="rounded-md p-1 text-[var(--text-faint)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
         >
@@ -141,7 +143,7 @@ export function ProjectSidebar({
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
         <Row
           id="all"
-          name="全部笔记"
+          name={t('sidebar.allNotes')}
           count={totalNotes}
           active={selectedProjectId === 'all'}
           icon={<Layers size={14} />}
@@ -149,7 +151,7 @@ export function ProjectSidebar({
         />
         <Row
           id="root"
-          name="未分类"
+          name={t('sidebar.uncategorized')}
           active={selectedProjectId === 'root'}
           icon={<FolderPlus size={14} />}
           onSelect={() => setProject('root')}
@@ -173,7 +175,7 @@ export function ProjectSidebar({
                   <DropdownMenu.Trigger asChild>
                     <button
                       type="button"
-                      aria-label={`${project.name} 的操作`}
+                      aria-label={t('sidebar.projectActions', { name: project.name })}
                       className="hidden rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text)] group-hover:block data-[state=open]:block"
                     >
                       <MoreHorizontal size={14} />
@@ -189,13 +191,13 @@ export function ProjectSidebar({
                         onSelect={() => setRenaming(project)}
                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
                       >
-                        <Pencil size={13} /> 重命名项目
+                        <Pencil size={13} /> {t('sidebar.renameProject')}
                       </DropdownMenu.Item>
                       <DropdownMenu.Item
                         onSelect={() => setDeleting(project)}
                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[var(--danger)] outline-none data-[highlighted]:bg-[var(--danger-soft)]"
                       >
-                        <Trash2 size={13} /> 删除项目
+                        <Trash2 size={13} /> {t('sidebar.deleteProject')}
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
@@ -206,7 +208,7 @@ export function ProjectSidebar({
 
         {(projects ?? []).filter((project) => project.kind === 'folder').length === 0 && (
           <p className="px-3 py-2 text-[12px] leading-relaxed text-[var(--text-faint)]">
-            还没有项目。点击右上角 + 新建一个，笔记也可以直接放在「未分类」。
+            {t('sidebar.empty')}
           </p>
         )}
       </nav>
@@ -218,26 +220,26 @@ export function ProjectSidebar({
           className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
         >
           <Trash2 size={14} className="text-[var(--text-faint)]" />
-          回收站
+          {t('sidebar.trash')}
         </button>
       </div>
 
       <PromptDialog
         open={creating}
-        title="新建项目"
-        label="项目名称"
-        placeholder="例如：工作笔记"
-        confirmText="创建"
+        title={t('sidebar.newProject')}
+        label={t('sidebar.projectName')}
+        placeholder={t('sidebar.projectPlaceholder')}
+        confirmText={t('common.create')}
         onOpenChange={setCreating}
         onSubmit={onCreate}
       />
 
       <PromptDialog
         open={renaming !== null}
-        title="重命名项目"
-        label="项目名称"
+        title={t('sidebar.renameProject')}
+        label={t('sidebar.projectName')}
         initialValue={renaming?.name ?? ''}
-        confirmText="保存"
+        confirmText={t('common.save')}
         onOpenChange={(open) => !open && setRenaming(null)}
         onSubmit={async (value) => {
           if (renaming) {
@@ -248,13 +250,9 @@ export function ProjectSidebar({
 
       <ConfirmDialog
         open={deleting !== null}
-        title={`删除「${deleting?.name ?? ''}」？`}
-        description={
-          <>
-            项目中的 {deleting?.noteCount ?? 0} 篇笔记会一起移入回收站，可以随时恢复。
-          </>
-        }
-        confirmText="移入回收站"
+        title={t('sidebar.deleteTitle', { name: deleting?.name ?? '' })}
+        description={t('sidebar.deleteDescription', { count: deleting?.noteCount ?? 0 })}
+        confirmText={t('notes.moveToTrash')}
         onOpenChange={(open) => !open && setDeleting(null)}
         onConfirm={async () => {
           if (deleting) {

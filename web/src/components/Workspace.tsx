@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { useNavigate, useParams } from 'react-router';
 import { api } from '../api/client';
 import type { ChangeEvent, Note, NoteSummary, Project, TrashRestoreResult } from '../api/types';
+import { useI18n } from '../lib/i18n';
 import { isMod } from '../lib/utils';
 import { useToastStore } from '../store/toast';
 import { useUiStore } from '../store/ui';
@@ -19,6 +20,7 @@ export function Workspace() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { noteId = null } = useParams();
+  const { language, t } = useI18n();
   const toast = useToastStore((state) => state.push);
 
   const selectedProjectId = useUiStore((state) => state.selectedProjectId);
@@ -90,7 +92,7 @@ export function Workspace() {
         return left.pinned ? -1 : 1;
       }
       if (sort === 'title') {
-        return left.title.localeCompare(right.title, 'zh-CN');
+        return left.title.localeCompare(right.title, language === 'zh' ? 'zh-CN' : 'en');
       }
       if (sort === 'created') {
         return right.createdAt.localeCompare(left.createdAt);
@@ -98,7 +100,7 @@ export function Workspace() {
       return right.modifiedAt.localeCompare(left.modifiedAt);
     });
     return copy;
-  }, [notes, sort]);
+  }, [notes, sort, language]);
 
   const autoOpened = useRef(false);
   useEffect(() => {
@@ -128,14 +130,14 @@ export function Workspace() {
 
       if (event?.noteId && event.noteId === currentNoteIdRef.current) {
         if (event.kind === 'deleted') {
-          toast('当前笔记已在磁盘上被删除', 'error');
+          toast(t('workspace.noteDeleted'), 'error');
         }
         void queryClient.invalidateQueries({ queryKey: ['note', event.noteId] });
       }
     });
 
     return () => source.close();
-  }, [queryClient, toast]);
+  }, [queryClient, toast, t]);
 
   async function createNote() {
     const projectId = selectedProjectId === 'all' ? 'root' : selectedProjectId;
@@ -148,7 +150,7 @@ export function Workspace() {
       autoOpened.current = true;
       navigate(`/note/${note.id}`);
     } catch (reason) {
-      toast(reason instanceof Error ? reason.message : '新建笔记失败', 'error');
+      toast(reason instanceof Error ? reason.message : t('workspace.createFailed'), 'error');
     }
   }
 
@@ -179,9 +181,9 @@ export function Workspace() {
       if (noteId === noteIdToMove && updated.id !== noteIdToMove) {
         navigate(`/note/${updated.id}`, { replace: true });
       }
-      toast(`已移动到「${target?.name ?? '未分类'}」`, 'success');
+      toast(t('workspace.moved', { name: target?.name ?? t('sidebar.uncategorized') }), 'success');
     } catch (reason) {
-      toast(reason instanceof Error ? reason.message : '移动笔记失败', 'error');
+      toast(reason instanceof Error ? reason.message : t('workspace.moveFailed'), 'error');
     }
   }
 
@@ -192,9 +194,9 @@ export function Workspace() {
         current ? { ...current, ...updated } : updated,
       );
       await queryClient.invalidateQueries({ queryKey: ['notes'] });
-      toast(pinned ? '已置顶' : '已取消置顶', 'success');
+      toast(pinned ? t('workspace.pinned') : t('workspace.unpinned'), 'success');
     } catch (reason) {
-      toast(reason instanceof Error ? reason.message : '置顶失败', 'error');
+      toast(reason instanceof Error ? reason.message : t('workspace.pinFailed'), 'error');
     }
   }
 
@@ -205,10 +207,10 @@ export function Workspace() {
         queryClient.invalidateQueries({ queryKey: ['notes'] }),
         queryClient.invalidateQueries({ queryKey: ['projects'] }),
       ]);
-      toast(`已创建「${copy.title}」`, 'success');
+      toast(t('workspace.copyCreated', { title: copy.title }), 'success');
       navigate(`/note/${copy.id}`);
     } catch (reason) {
-      toast(reason instanceof Error ? reason.message : '创建副本失败', 'error');
+      toast(reason instanceof Error ? reason.message : t('workspace.copyFailed'), 'error');
     }
   }
 
@@ -222,7 +224,7 @@ export function Workspace() {
     if (note.id === noteId) {
       navigate('/', { replace: true });
     }
-    toast('已移入回收站', 'success');
+    toast(t('workspace.trashed'), 'success');
   }
 
   async function createProject(name: string) {
@@ -262,7 +264,7 @@ export function Workspace() {
     if (openNote?.projectId === project.id) {
       navigate('/', { replace: true });
     }
-    toast('项目已移入回收站', 'success');
+    toast(t('workspace.projectTrashed'), 'success');
   }
 
   function onRestored(result: TrashRestoreResult) {
@@ -365,7 +367,7 @@ export function Workspace() {
       {overlayOpen && (
         <button
           type="button"
-          aria-label="收起面板"
+          aria-label={t('workspace.collapsePanels')}
           onClick={() => setPanels(false, false)}
           className="fixed inset-0 z-20 bg-black/25 backdrop-blur-[1px]"
         />
@@ -390,7 +392,7 @@ export function Workspace() {
         <div
           role="separator"
           aria-orientation="vertical"
-          title="拖动调整项目栏宽度"
+          title={t('workspace.dragSidebar')}
           onPointerDown={(event) => beginResize('sidebar', event)}
           className="group relative z-10 -mr-1 w-2 shrink-0 cursor-col-resize"
         >
@@ -426,7 +428,7 @@ export function Workspace() {
         <div
           role="separator"
           aria-orientation="vertical"
-          title="拖动调整笔记列表宽度"
+          title={t('workspace.dragList')}
           onPointerDown={(event) => beginResize('list', event)}
           className="group relative z-10 -mr-1 w-2 shrink-0 cursor-col-resize"
         >
@@ -453,10 +455,10 @@ export function Workspace() {
 
       <PromptDialog
         open={renamingNote !== null}
-        title="重命名笔记"
-        label="标题"
+        title={t('notes.renameTitle')}
+        label={t('notes.titleLabel')}
         initialValue={renamingNote?.title ?? ''}
-        confirmText="保存"
+        confirmText={t('common.save')}
         onOpenChange={(open) => !open && setRenamingNote(null)}
         onSubmit={async (value) => {
           if (renamingNote) {

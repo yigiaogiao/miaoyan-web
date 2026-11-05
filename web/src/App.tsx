@@ -3,12 +3,14 @@ import { Navigate, Route, Routes } from 'react-router';
 import { api } from './api/client';
 import { LoginScreen } from './components/LoginScreen';
 import { Workspace } from './components/Workspace';
+import { useI18n } from './lib/i18n';
 import { useUiStore } from './store/ui';
 
 type AuthState = 'checking' | 'required' | 'ok';
 
 export default function App() {
   const theme = useUiStore((state) => state.theme);
+  const { t } = useI18n();
   const [auth, setAuth] = useState<AuthState>('checking');
 
   useEffect(() => {
@@ -46,7 +48,7 @@ export default function App() {
   if (auth === 'checking') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] text-sm text-[var(--text-faint)]">
-        妙言 Web
+        {t('brand')}
       </div>
     );
   }

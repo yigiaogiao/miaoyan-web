@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { api } from '../api/client';
 import type { NoteSummary } from '../api/types';
+import { useI18n } from '../lib/i18n';
 import { formatRelativeTime } from '../lib/utils';
 
 interface Props {
@@ -42,6 +43,7 @@ function highlight(text: string, query: string): ReactNode {
 }
 
 export function CommandPalette({ open, onOpenChange, onOpenNote, recent }: Props) {
+  const { t } = useI18n();
   const [raw, setRaw] = useState('');
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
@@ -119,7 +121,7 @@ export function CommandPalette({ open, onOpenChange, onOpenNote, recent }: Props
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[2px]" />
         <Dialog.Content className="fixed left-1/2 top-[12vh] z-50 w-[min(94vw,40rem)] -translate-x-1/2 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] shadow-2xl outline-none">
-          <Dialog.Title className="sr-only">搜索笔记</Dialog.Title>
+          <Dialog.Title className="sr-only">{t('palette.title')}</Dialog.Title>
           <div className="flex items-center gap-2.5 border-b border-[var(--border)] px-4">
             <Search size={17} className="shrink-0 text-[var(--text-faint)]" />
             <input
@@ -127,7 +129,7 @@ export function CommandPalette({ open, onOpenChange, onOpenNote, recent }: Props
               value={raw}
               onChange={(event) => setRaw(event.target.value)}
               onKeyDown={onKeyDown}
-              placeholder="搜索标题或正文…"
+              placeholder={t('palette.placeholder')}
               className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--text-faint)]"
             />
             {searchQuery.isFetching && (
@@ -138,12 +140,12 @@ export function CommandPalette({ open, onOpenChange, onOpenNote, recent }: Props
           <div ref={listRef} className="max-h-[min(60vh,26rem)] overflow-y-auto p-1.5">
             {!query && (
               <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-[var(--text-faint)]">
-                最近笔记
+                {t('palette.recent')}
               </p>
             )}
             {items.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-[var(--text-faint)]">
-                {query ? `没有找到「${query}」` : '还没有笔记'}
+                {query ? t('palette.noResults', { query }) : t('palette.noNotes')}
               </p>
             ) : (
               items.map((item, index) => (
@@ -185,11 +187,11 @@ export function CommandPalette({ open, onOpenChange, onOpenNote, recent }: Props
           </div>
 
           <div className="flex items-center gap-3 border-t border-[var(--border)] px-4 py-2 text-[10.5px] text-[var(--text-faint)]">
-            <span>↑↓ 选择</span>
+            <span>{t('palette.select')}</span>
             <span className="flex items-center gap-1">
-              <CornerDownLeft size={11} /> 打开
+              <CornerDownLeft size={11} /> {t('palette.open')}
             </span>
-            <span>Esc 关闭</span>
+            <span>{t('palette.close')}</span>
             <span className="flex-1" />
             <span>⌘K</span>
           </div>

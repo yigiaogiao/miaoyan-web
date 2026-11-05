@@ -10,6 +10,7 @@ import {
   type Ref,
 } from 'react';
 import { renderDiagrams } from '../lib/diagrams';
+import { useI18n } from '../lib/i18n';
 import { renderMarkdown } from '../lib/markdown';
 import { useResolvedTheme } from '../lib/theme';
 
@@ -30,6 +31,7 @@ export const MarkdownPreview = forwardRef(function MarkdownPreview(
   { content, noteId, linkTitles, onWikilink, onVisibleLine }: Props,
   ref: Ref<MarkdownPreviewHandle>,
 ) {
+  const { t } = useI18n();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
   const theme = useResolvedTheme();
@@ -108,14 +110,14 @@ export const MarkdownPreview = forwardRef(function MarkdownPreview(
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'code-copy';
-      button.textContent = '复制';
+      button.textContent = t('markdown.copy');
       const onClick = (event: globalThis.MouseEvent) => {
         event.preventDefault();
         const text = pre.querySelector('code')?.textContent ?? '';
         void navigator.clipboard.writeText(text).then(() => {
-          button.textContent = '已复制';
+          button.textContent = t('markdown.copied');
           window.setTimeout(() => {
-            button.textContent = '复制';
+            button.textContent = t('markdown.copy');
           }, 1200);
         });
       };
@@ -124,7 +126,7 @@ export const MarkdownPreview = forwardRef(function MarkdownPreview(
       cleanups.push(() => button.removeEventListener('click', onClick));
     });
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [html]);
+  }, [html, t]);
 
   useEffect(() => {
     if (!lightbox) {
@@ -182,7 +184,7 @@ export const MarkdownPreview = forwardRef(function MarkdownPreview(
   if (!content.trim()) {
     return (
       <div className="grid h-full place-items-center px-8 text-center text-sm text-[var(--text-faint)]">
-        开始输入，这里会实时显示预览。
+        {t('markdown.previewEmpty')}
       </div>
     );
   }
@@ -199,7 +201,7 @@ export const MarkdownPreview = forwardRef(function MarkdownPreview(
       {lightbox && (
         <button
           type="button"
-          aria-label="关闭图片预览"
+          aria-label={t('markdown.closePreview')}
           onClick={() => setLightbox(null)}
           className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-6 backdrop-blur-sm"
         >

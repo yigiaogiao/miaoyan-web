@@ -1,4 +1,5 @@
 import { renderDiagrams } from './diagrams';
+import { currentLanguage, t } from './i18n';
 import { renderMarkdown } from './markdown';
 
 const EXPORT_CSS = `
@@ -46,7 +47,7 @@ article.md-preview{max-width:820px;margin:40px auto;padding:48px 56px;background
 `;
 
 function safeFilename(title: string): string {
-  return (title.trim() || '未命名笔记').replace(/[\\/:*?"<>|\n]/g, '-').slice(0, 120);
+  return (title.trim() || t('common.unnamedNote')).replace(/[\\/:*?"<>|\n]/g, '-').slice(0, 120);
 }
 
 export function downloadText(filename: string, text: string, mime: string): void {
@@ -161,7 +162,7 @@ export async function buildStandaloneHtml(options: {
     });
 
     return `<!doctype html>
-<html lang="zh-CN">
+<html lang="${currentLanguage() === 'zh' ? 'zh-CN' : 'en'}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

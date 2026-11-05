@@ -5,6 +5,7 @@ import { History, Loader2, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { Note, NoteVersion } from '../api/types';
+import { useI18n } from '../lib/i18n';
 import { useToastStore } from '../store/toast';
 
 interface Props {
@@ -16,8 +17,8 @@ interface Props {
   onRestored: (note: Note) => void;
 }
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleString('zh-CN', {
+function formatDate(value: string, locale: string): string {
+  return new Date(value).toLocaleString(locale, {
     month: 'numeric',
     day: 'numeric',
     hour: '2-digit',
@@ -41,6 +42,8 @@ export function VersionHistoryDialog({
   currentEtag,
   onRestored,
 }: Props) {
+  const { language, t, tn } = useI18n();
+  const locale = language === 'zh' ? 'zh-CN' : 'en-US';
   const queryClient = useQueryClient();
   const toast = useToastStore((state) => state.push);
   const [selected, setSelected] = useState<string | null>(null);
@@ -86,10 +89,10 @@ export function VersionHistoryDialog({
         queryClient.invalidateQueries({ queryKey: ['notes'] }),
       ]);
       onRestored(restored);
-      toast('已恢复该版本', 'success');
+      toast(t('versions.restored'), 'success');
       onOpenChange(false);
     } catch (reason) {
-      toast(reason instanceof Error ? reason.message : '恢复失败', 'error');
+      toast(reason instanceof Error ? reason.message : t('versions.restoreFailed'), 'error');
     } finally {
       setRestoring(false);
     }
@@ -102,15 +105,15 @@ export function VersionHistoryDialog({
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex h-[min(86vh,44rem)] w-[min(96vw,64rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] shadow-2xl outline-none">
           <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-[var(--border)] px-4">
             <History size={16} className="text-[var(--text-muted)]" />
-            <Dialog.Title className="text-sm font-semibold">版本历史</Dialog.Title>
+            <Dialog.Title className="text-sm font-semibold">{t('versions.title')}</Dialog.Title>
             <span className="text-xs text-[var(--text-faint)]">
-              {versions ? `${versions.length} 个版本` : ''}
+              {versions ? tn('versions.count', versions.length) : ''}
             </span>
             <div className="flex-1" />
             <Dialog.Close asChild>
               <button
                 type="button"
-                aria-label="关闭"
+                aria-label={t('common.close')}
                 className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
               >
                 <X size={16} />
@@ -126,7 +129,7 @@ export function VersionHistoryDialog({
                 </div>
               ) : (versions?.length ?? 0) === 0 ? (
                 <p className="px-3 py-8 text-center text-xs leading-relaxed text-[var(--text-faint)]">
-                  还没有版本。保存后会自动记录，最多保留 50 个。
+                  {t('versions.empty')}
                 </p>
               ) : (
                 versions!.map((version) => {
@@ -143,10 +146,10 @@ export function VersionHistoryDialog({
                       }`}
                     >
                       <span className="flex items-center gap-1.5">
-                        <span className="font-medium">{formatDate(version.createdAt)}</span>
+                        <span className="font-medium">{formatDate(version.createdAt, locale)}</span>
                         {version.isCurrent && (
                           <span className="rounded bg-[var(--accent)] px-1 py-0.5 text-[9px] font-medium text-white">
-                            当前
+                            {t('versions.current')}
                           </span>
                         )}
                       </span>
@@ -163,7 +166,7 @@ export function VersionHistoryDialog({
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 {!activeId ? (
                   <div className="grid flex-1 place-items-center px-6 text-center text-sm text-[var(--text-faint)]">
-                    选择一个版本查看与当前文本的差异。
+                    {t('versions.pick')}
                   </div>
                 ) : detailQuery.isLoading ? (
                   <div className="grid flex-1 place-items-center">
@@ -171,15 +174,15 @@ export function VersionHistoryDialog({
                   </div>
                 ) : detailQuery.error ? (
                   <div className="grid flex-1 place-items-center px-6 text-center text-sm text-[var(--danger)]">
-                    {detailQuery.error instanceof Error ? detailQuery.error.message : '读取版本失败'}
+                    {detailQuery.error instanceof Error ? detailQuery.error.message : t('versions.readFailed')}
                   </div>
                 ) : (
                   <>
                     <div className="flex shrink-0 items-center gap-3 border-b border-[var(--border)] px-4 py-2 text-[11px] text-[var(--text-faint)]">
-                      <span className="text-[var(--danger)]">− 此版本</span>
-                      <span className="text-[var(--accent-strong)]">+ 当前文本</span>
+                      <span className="text-[var(--danger)]">{t('versions.old')}</span>
+                      <span className="text-[var(--accent-strong)]">{t('versions.new')}</span>
                       <span className="flex-1" />
-                      <span>{activeVersion ? formatDate(activeVersion.createdAt) : ''}</span>
+                      <span>{activeVersion ? formatDate(activeVersion.createdAt, locale) : ''}</span>
                     </div>
                     <div className="min-h-0 flex-1 overflow-auto bg-[var(--surface)] font-mono text-[12.5px] leading-[1.7]">
                       {diff.map((part, index) => (
@@ -224,7 +227,7 @@ export function VersionHistoryDialog({
 
               <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3">
                 <p className="text-[11px] leading-relaxed text-[var(--text-faint)]">
-                  恢复前会先把当前文本存为一个新版本，不会丢失。
+                  {t('versions.restoreHint')}
                 </p>
                 <button
                   type="button"
@@ -233,7 +236,7 @@ export function VersionHistoryDialog({
                   className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3.5 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {restoring ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
-                  恢复此版本
+                  {t('versions.restore')}
                 </button>
               </footer>
             </div>

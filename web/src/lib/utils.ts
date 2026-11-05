@@ -1,15 +1,18 @@
+import { currentLanguage, t } from './i18n';
+
 export function formatRelativeTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return '';
   }
 
+  const locale = currentLanguage() === 'zh' ? 'zh-CN' : 'en';
   const seconds = Math.round((date.getTime() - Date.now()) / 1000);
   const absolute = Math.abs(seconds);
-  const formatter = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' });
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
 
   if (absolute < 60) {
-    return '刚刚';
+    return t('time.justNow');
   }
   if (absolute < 3600) {
     return formatter.format(Math.round(seconds / 60), 'minute');
@@ -21,7 +24,7 @@ export function formatRelativeTime(value: string): string {
     return formatter.format(Math.round(seconds / 86400), 'day');
   }
 
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(locale, {
     year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
     month: 'short',
     day: 'numeric',

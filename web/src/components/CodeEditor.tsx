@@ -25,6 +25,7 @@ import {
   type CSSProperties,
   type Ref,
 } from 'react';
+import { t } from '../lib/i18n';
 import { slashCompletionSource } from '../lib/slash';
 
 export interface CodeEditorHandle {
@@ -298,7 +299,7 @@ function CodeEditorInner(
               ]),
           EditorState.allowMultipleSelections.of(true),
           EditorView.lineWrapping,
-          placeholderExt(placeholder ?? '开始写点什么…'),
+          placeholderExt(placeholder ?? t('editor.placeholder')),
           EditorState.readOnly.of(readOnly),
           keymap.of([
             {
