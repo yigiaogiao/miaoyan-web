@@ -30,6 +30,7 @@ builder.Services.AddSingleton<NoteIndexService>();
 builder.Services.AddSingleton<VaultService>();
 builder.Services.AddSingleton<MediaLibrary>();
 builder.Services.AddSingleton<CategoryStore>();
+builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<VaultWatcher>();
 builder.Services.AddSingleton<CapabilitiesService>();
 builder.Services.AddSingleton<PlantUmlRenderer>();
@@ -152,6 +153,8 @@ app.MapGet("/healthz", (VaultRegistry v, CapabilitiesService c) =>
 });
 
 app.MapGet("/api/health", () => Results.Redirect("/healthz"));
+app.UseMiaoYanAuth();
+app.MapAuthApi();
 app.MapRenderApi();
 app.MapVaultApi();
 

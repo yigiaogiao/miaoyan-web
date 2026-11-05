@@ -132,3 +132,10 @@ export interface ChangeEvent {
   path: string | null;
   at: string;
 }
+
+export interface AuthStatus {
+  required: boolean;
+  authenticated: boolean;
+  password: boolean;
+  apiKey: boolean;
+}

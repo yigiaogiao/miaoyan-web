@@ -1,5 +1,6 @@
 import type {
   Asset,
+  AuthStatus,
   Backlink,
   ChangeEvent,
   ConflictInfo,
@@ -48,6 +49,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const data = text ? (JSON.parse(text) as unknown) : null;
 
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/api/auth/')) {
+      window.dispatchEvent(new Event('miaoyan:unauthorized'));
+    }
     const body = data as { error?: string; message?: string } | null;
     throw new ApiError(
       response.status,
@@ -76,6 +80,14 @@ function query(params: Record<string, string | undefined>): string {
 }
 
 export const api = {
+  authStatus: () => request<AuthStatus>('/api/auth/status'),
+  login: (secret: string) =>
+    request<{ ok: boolean; required: boolean }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ secret }),
+    }),
+  logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
+
   vault: () => request<VaultInfo>('/api/vault'),
 
   projects: () => request<Project[]>('/api/projects'),
