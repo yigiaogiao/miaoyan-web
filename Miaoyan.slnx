@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/server/">
+    <Project Path="server/MiaoYan.Web.Tests/MiaoYan.Web.Tests.csproj" />
+    <Project Path="server/MiaoYan.Web/MiaoYan.Web.csproj" />
+  </Folder>
+</Solution>

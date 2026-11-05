@@ -1,0 +1,14 @@
+# Offline / self-contained variant: builds the image from ../Dockerfile and
+# embeds it into the LPK. Use only when you cannot publish to a registry; the
+# resulting package is several hundred MB.
+#
+#   lzc-cli project build . -f lzc-build.embed.yml
+#
+# It requires `image: embed:miaoyan` in lzc-manifest.yml (see README).
+manifest: ./lzc-manifest.yml
+pkgout: .
+icon: ./icon.png
+images:
+  miaoyan:
+    dockerfile: ../Dockerfile
+    context: ..

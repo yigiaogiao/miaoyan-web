@@ -1,0 +1,30 @@
+services:
+  miaoyan:
+    build: .
+    image: miaoyan-web:local
+    container_name: miaoyan-web
+    restart: unless-stopped
+    ports:
+      - "5080:5080"
+    environment:
+      MIAOYAN_LIBRARY: /data/Miaoyan
+      MIAOYAN_STATE_DIR: /data/state
+      # Set a password if this port is reachable from an untrusted network.
+      # MIAOYAN_WEB_PASSWORD: change-me
+      # Optional Papyra-ingest compatibility key.
+      # MIAOYAN_API_KEY: change-me
+      MIAOYAN_MAX_UPLOAD_MB: "100"
+    volumes:
+      # Notes stay human-readable on the host; the index is rebuildable state.
+      - miaoyan-library:/data/Miaoyan
+      - miaoyan-state:/data/state
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  miaoyan-library:
+  miaoyan-state:

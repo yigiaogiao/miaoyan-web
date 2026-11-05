@@ -1,0 +1,38 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Node
+node_modules/
+dist/
+web-dist/
+.vite/
+
+# Build output copied into the API project
+server/MiaoYan.Web/wwwroot/*
+!server/MiaoYan.Web/wwwroot/.gitkeep
+
+# Runtime data (vault/state), local dev libraries and published output
+data/
+dev-library/
+dev-state/
+artifacts/
+*.db
+*.db-wal
+*.db-shm
+*.lpk
+*.log
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp

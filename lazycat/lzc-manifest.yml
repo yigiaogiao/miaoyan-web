@@ -1,0 +1,48 @@
+application:
+  subdomain: miaoyan
+  routes:
+    - /=http://miaoyan.cloud.lazycat.app.miaoyanweb.lzcapp:5080
+  injects:
+    # Same reasoning as Papyra: the gateway can heuristically cache the entry
+    # HTML, which would keep old bundles alive after an upgrade. Hashed /assets
+    # and API responses are excluded.
+    - id: miaoyan-revalidate-html
+      auth_required: false
+      on: response
+      when:
+        - /*
+      unless:
+        - /api
+        - /api*
+        - /media*
+        - /assets*
+        - /healthz
+      do: |
+        ctx.headers.set("Cache-Control", "no-cache, must-revalidate");
+
+services:
+  miaoyan:
+    # Replace with the registry.lazycat.cloud reference printed by
+    # `lzc-cli appstore copy-image` before submitting to the store.
+    # See lazycat/README.md and scripts/prepare-store-image.sh.
+    image: registry.lazycat.cloud/miaoyan/miaoyan-web:0.1.0
+    entrypoint: /usr/local/bin/entrypoint.sh
+    command:
+      - dotnet
+      - MiaoYan.Web.dll
+    # Maps /lzcapp persistent directory owners to the container user and makes
+    # /lzcapp/documents/<uid> usable. Requires lzcos >= 1.6.0.
+    run_as: "1000:1000"
+    environment:
+      - ASPNETCORE_URLS=http://+:5080
+      - DOTNET_EnableDiagnostics=0
+      # Per-user state lives under the app's persistent var dir. The vault is
+      # resolved from X-HC-User-ID and /lzcapp/documents/<uid>/MiaoYan.
+      - MIAOYAN_STATE_DIR=/lzcapp/var/miaoyan
+      - MIAOYAN_MAX_UPLOAD_MB=200
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
