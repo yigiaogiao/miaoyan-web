@@ -90,7 +90,7 @@ export const api = {
     request<void>(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   notes: (projectId: string, search: string) =>
-    request<NoteSummary[]>(`/api/notes${query({ project: projectId, q: search })}`),
+    request<NoteSummary[]>(`/api/notes${query({ project: projectId, q: search, summary: '1' })}`),
   note: (id: string) => request<Note>(`/api/notes/${encodeURIComponent(id)}`),
   createNote: (projectId: string, title?: string) =>
     request<Note>('/api/notes', {
