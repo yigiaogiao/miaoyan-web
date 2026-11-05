@@ -2,14 +2,28 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  Bold,
   Check,
+  Code2,
   Columns2,
   Copy,
   Eye,
+  FileCode2,
+  FileText,
+  Focus,
+  Heading1,
+  Heading2,
+  Heading3,
   History,
+  Italic,
+  Link,
   Link2,
   List,
+  ListOrdered,
+  ListTodo,
+  ListTree,
   Loader2,
+  Minus,
   Monitor,
   Moon,
   MoreHorizontal,
@@ -18,22 +32,33 @@ import {
   PenLine,
   Pin,
   PinOff,
+  Presentation,
+  Printer,
+  Quote,
   RotateCcw,
+  Settings2,
+  Sigma,
+  Strikethrough,
   Sun,
+  Table2,
   Trash2,
-  UploadCloud,
+  Wand2,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { api, isConflictError } from '../api/client';
 import type { ConflictInfo, Note, ThemeMode, ViewMode } from '../api/types';
+import { exportHtml, exportMarkdown, exportPdf } from '../lib/export';
+import { tidyMarkdown } from '../lib/format';
+import { extractHeadings } from '../lib/markdown';
 import { formatRelativeTime, isMod } from '../lib/utils';
 import { useToastStore } from '../store/toast';
 import { useUiStore } from '../store/ui';
 import { CodeEditor, type CodeEditorHandle } from './CodeEditor';
-import { MarkdownPreview } from './MarkdownPreview';
+import { MarkdownPreview, type MarkdownPreviewHandle } from './MarkdownPreview';
 import { ConfirmDialog } from './Dialogs';
+import { PptView } from './PptView';
 import { VersionHistoryDialog } from './VersionHistoryDialog';
 
 interface Props {
@@ -79,6 +104,16 @@ export function EditorPane({
   const toggleList = useUiStore((state) => state.toggleList);
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
   const listOpen = useUiStore((state) => state.listOpen);
+  const focusMode = useUiStore((state) => state.focusMode);
+  const setFocusMode = useUiStore((state) => state.setFocusMode);
+  const typewriter = useUiStore((state) => state.typewriter);
+  const setTypewriter = useUiStore((state) => state.setTypewriter);
+  const editorFontSize = useUiStore((state) => state.editorFontSize);
+  const setEditorFontSize = useUiStore((state) => state.setEditorFontSize);
+  const editorLineHeight = useUiStore((state) => state.editorLineHeight);
+  const setEditorLineHeight = useUiStore((state) => state.setEditorLineHeight);
+  const editorWidth = useUiStore((state) => state.editorWidth);
+  const setEditorWidth = useUiStore((state) => state.setEditorWidth);
 
   const { data: note, error, isLoading, refetch } = useQuery({
     queryKey: ['note', noteId],
@@ -112,7 +147,11 @@ export function EditorPane({
   );
 
   const [showBacklinks, setShowBacklinks] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [pptOpen, setPptOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [content, setContent] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [externalUpdate, setExternalUpdate] = useState(false);
@@ -121,6 +160,9 @@ export function EditorPane({
   const [deleting, setDeleting] = useState(false);
 
   const editorRef = useRef<CodeEditorHandle>(null);
+  const previewRef = useRef<MarkdownPreviewHandle>(null);
+  const syncSource = useRef<'editor' | 'preview' | null>(null);
+  const syncTimer = useRef(0);
   const etagRef = useRef<string | null>(null);
   const savedContentRef = useRef('');
   const contentRef = useRef('');
@@ -136,6 +178,37 @@ export function EditorPane({
     contentRef.current = value;
     setContent(value);
   }, []);
+
+  const releaseSync = useCallback(() => {
+    window.clearTimeout(syncTimer.current);
+    syncTimer.current = window.setTimeout(() => {
+      syncSource.current = null;
+    }, 180);
+  }, []);
+
+  const syncFromEditor = useCallback(
+    (line: number) => {
+      if (viewMode !== 'split' || syncSource.current === 'preview') {
+        return;
+      }
+      syncSource.current = 'editor';
+      previewRef.current?.scrollToLine(line);
+      releaseSync();
+    },
+    [releaseSync, viewMode],
+  );
+
+  const syncFromPreview = useCallback(
+    (line: number) => {
+      if (viewMode !== 'split' || syncSource.current === 'editor') {
+        return;
+      }
+      syncSource.current = 'preview';
+      editorRef.current?.scrollToLine(line);
+      releaseSync();
+    },
+    [releaseSync, viewMode],
+  );
 
   const adopt = useCallback((value: Note) => {
     contentRef.current = value.content;
@@ -289,6 +362,16 @@ export function EditorPane({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (isMod(event) && event.altKey && event.code === 'KeyP') {
+        event.preventDefault();
+        setPptOpen(true);
+        return;
+      }
+      if (isMod(event) && event.shiftKey && event.code === 'KeyF') {
+        event.preventDefault();
+        setFocusMode(!focusMode);
+        return;
+      }
       if (isMod(event) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         void saveNow({ force: true });
@@ -296,7 +379,7 @@ export function EditorPane({
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [saveNow]);
+  }, [focusMode, saveNow, setFocusMode]);
 
   const uploadFiles = useCallback(
     async (files: File[], position: number | null) => {
@@ -388,6 +471,62 @@ export function EditorPane({
   );
 
   const words = useMemo(() => countWords(content), [content]);
+  const headings = useMemo(() => extractHeadings(content), [content]);
+
+  const handleTidy = useCallback(() => {
+    const next = tidyMarkdown(contentRef.current);
+    if (next === contentRef.current) {
+      toast('格式已经很整齐', 'success');
+      return;
+    }
+    editorRef.current?.replaceAll(next);
+    toast('已整理格式', 'success');
+  }, [toast]);
+
+  const handleExportHtml = useCallback(async () => {
+    const current = noteRef.current;
+    if (!current) {
+      return;
+    }
+    setExporting(true);
+    try {
+      await exportHtml({
+        title: current.title,
+        content: contentRef.current,
+        noteId: current.id,
+        linkTitles,
+      });
+      toast('已导出 HTML', 'success');
+    } catch (reason) {
+      toast(reason instanceof Error ? reason.message : '导出失败', 'error');
+    } finally {
+      setExporting(false);
+    }
+  }, [linkTitles, toast]);
+
+  const handleExportPdf = useCallback(async () => {
+    const current = noteRef.current;
+    if (!current) {
+      return;
+    }
+    // Open during the click so popup blockers keep the preview window.
+    const target = window.open('', '_blank');
+    setExporting(true);
+    try {
+      await exportPdf({
+        title: current.title,
+        content: contentRef.current,
+        noteId: current.id,
+        linkTitles,
+        target,
+      });
+    } catch (reason) {
+      target?.close();
+      toast(reason instanceof Error ? reason.message : '导出 PDF 失败', 'error');
+    } finally {
+      setExporting(false);
+    }
+  }, [linkTitles, toast]);
 
   if (isLoading) {
     return (
@@ -458,6 +597,18 @@ export function EditorPane({
             className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
           >
             <List size={16} />
+          </button>
+        )}
+
+        {focusMode && (
+          <button
+            type="button"
+            title="退出专注模式 (⌘⇧F)"
+            onClick={() => setFocusMode(false)}
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[11px] text-[var(--accent-strong)]"
+          >
+            <Focus size={13} />
+            专注
           </button>
         )}
 
@@ -533,8 +684,49 @@ export function EditorPane({
 
         <button
           type="button"
+          title="大纲"
+          onClick={() => {
+            setOutlineOpen((value) => !value);
+            setShowBacklinks(false);
+          }}
+          className={`rounded-lg p-1.5 ${
+            outlineOpen
+              ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
+              : 'text-[var(--text-muted)] hover:bg-[var(--accent-soft)]'
+          }`}
+        >
+          <ListTree size={15} />
+        </button>
+
+        <button
+          type="button"
+          title="编辑设置"
+          onClick={() => setSettingsOpen((value) => !value)}
+          className={`rounded-lg p-1.5 ${
+            settingsOpen
+              ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
+              : 'text-[var(--text-muted)] hover:bg-[var(--accent-soft)]'
+          }`}
+        >
+          <Settings2 size={15} />
+        </button>
+
+        <button
+          type="button"
+          title="演示文稿 (⌘⌥P)"
+          onClick={() => setPptOpen(true)}
+          className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
+        >
+          <Presentation size={15} />
+        </button>
+
+        <button
+          type="button"
           title="反向链接"
-          onClick={() => setShowBacklinks((value) => !value)}
+          onClick={() => {
+            setShowBacklinks((value) => !value);
+            setOutlineOpen(false);
+          }}
           className={`flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] ${
             showBacklinks
               ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
@@ -626,7 +818,28 @@ export function EditorPane({
                 }}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
-                <UploadCloud size={13} /> 复制全文
+                <Copy size={13} /> 复制全文
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-[var(--border)]" />
+              <DropdownMenu.Item
+                onSelect={() => exportMarkdown(note.title, contentRef.current)}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
+              >
+                <FileText size={13} /> 导出 Markdown
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={exporting}
+                onSelect={() => void handleExportHtml()}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)] data-[disabled]:opacity-50"
+              >
+                <FileCode2 size={13} /> 导出 HTML
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={exporting}
+                onSelect={() => void handleExportPdf()}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)] data-[disabled]:opacity-50"
+              >
+                <Printer size={13} /> 打印 / 导出 PDF
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => setDeleting(true)}
@@ -638,6 +851,99 @@ export function EditorPane({
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       </header>
+
+      {viewMode !== 'preview' && (
+        <div className="format-bar flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface)] px-2">
+          <FormatButton title="一级标题" onClick={() => editorRef.current?.toggleHeading(1)}>
+            <Heading1 size={15} />
+          </FormatButton>
+          <FormatButton title="二级标题" onClick={() => editorRef.current?.toggleHeading(2)}>
+            <Heading2 size={15} />
+          </FormatButton>
+          <FormatButton title="三级标题" onClick={() => editorRef.current?.toggleHeading(3)}>
+            <Heading3 size={15} />
+          </FormatButton>
+          <FormatDivider />
+          <FormatButton
+            title="加粗"
+            onClick={() => editorRef.current?.wrapSelection('**', '**', '粗体')}
+          >
+            <Bold size={15} />
+          </FormatButton>
+          <FormatButton
+            title="斜体"
+            onClick={() => editorRef.current?.wrapSelection('*', '*', '斜体')}
+          >
+            <Italic size={15} />
+          </FormatButton>
+          <FormatButton
+            title="删除线"
+            onClick={() => editorRef.current?.wrapSelection('~~', '~~', '删除线')}
+          >
+            <Strikethrough size={15} />
+          </FormatButton>
+          <FormatButton
+            title="行内代码"
+            onClick={() => editorRef.current?.wrapSelection('`', '`', '代码')}
+          >
+            <Code2 size={15} />
+          </FormatButton>
+          <FormatButton
+            title="链接"
+            onClick={() => editorRef.current?.wrapSelection('[', '](https://)', '链接文字')}
+          >
+            <Link size={15} />
+          </FormatButton>
+          <FormatDivider />
+          <FormatButton title="引用" onClick={() => editorRef.current?.toggleLinePrefix('> ')}>
+            <Quote size={15} />
+          </FormatButton>
+          <FormatButton title="无序列表" onClick={() => editorRef.current?.toggleLinePrefix('- ')}>
+            <List size={15} />
+          </FormatButton>
+          <FormatButton
+            title="有序列表"
+            onClick={() => editorRef.current?.toggleLinePrefix('1. ', true)}
+          >
+            <ListOrdered size={15} />
+          </FormatButton>
+          <FormatButton
+            title="待办事项"
+            onClick={() => editorRef.current?.toggleLinePrefix('- [ ] ')}
+          >
+            <ListTodo size={15} />
+          </FormatButton>
+          <FormatButton
+            title="表格"
+            onClick={() =>
+              editorRef.current?.insertText(
+                '\n| 列 1 | 列 2 | 列 3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |\n',
+              )
+            }
+          >
+            <Table2 size={15} />
+          </FormatButton>
+          <FormatButton
+            title="公式块"
+            onClick={() => editorRef.current?.wrapSelection('$$\n', '\n$$', 'E = mc^2')}
+          >
+            <Sigma size={15} />
+          </FormatButton>
+          <FormatButton
+            title="分隔线"
+            onClick={() => editorRef.current?.insertText('\n---\n')}
+          >
+            <Minus size={15} />
+          </FormatButton>
+          <span className="flex-1" />
+          <FormatButton title="整理格式" onClick={handleTidy}>
+            <Wand2 size={15} />
+          </FormatButton>
+          <span className="hidden items-center gap-1 pr-1 text-[11px] text-[var(--text-faint)] md:flex">
+            输入 / 使用模板
+          </span>
+        </div>
+      )}
 
       {externalUpdate && (
         <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--warning-soft)] px-3 py-2 text-xs text-[var(--warning)]">
@@ -709,6 +1015,122 @@ export function EditorPane({
         </div>
       )}
 
+      {outlineOpen && (
+        <div className="absolute right-3 top-[58px] z-30 flex max-h-[62%] w-[min(92vw,320px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] shadow-2xl">
+          <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2">
+            <ListTree size={13} className="text-[var(--accent)]" />
+            <span className="text-xs font-semibold">大纲</span>
+            <span className="text-[11px] text-[var(--text-faint)]">{headings.length}</span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              aria-label="关闭大纲"
+              onClick={() => setOutlineOpen(false)}
+              className="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text)]"
+            >
+              <X size={13} />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+            {headings.length === 0 ? (
+              <p className="px-3 py-6 text-center text-xs text-[var(--text-faint)]">
+                这篇笔记还没有标题。用 <code className="rounded bg-[var(--surface-sunken)] px-1">#</code> 开头创建标题。
+              </p>
+            ) : (
+              headings.map((heading) => (
+                <button
+                  key={`${heading.id}-${heading.line}`}
+                  type="button"
+                  onClick={() => {
+                    previewRef.current?.scrollToHeading(heading.id);
+                    editorRef.current?.scrollToLine(heading.line);
+                  }}
+                  style={{ paddingLeft: `${8 + (heading.level - 1) * 12}px` }}
+                  className="block w-full truncate rounded-md py-1.5 pr-2 text-left text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
+                  title={heading.text}
+                >
+                  {heading.text}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="关闭编辑设置"
+            onClick={() => setSettingsOpen(false)}
+            className="fixed inset-0 z-20 cursor-default"
+          />
+          <div className="absolute right-3 top-[58px] z-30 w-[min(92vw,290px)] rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3 shadow-2xl">
+            <div className="mb-2 flex items-center gap-2">
+              <Settings2 size={13} className="text-[var(--accent)]" />
+              <span className="text-xs font-semibold">编辑设置</span>
+              <span className="flex-1" />
+              <button
+                type="button"
+                aria-label="关闭编辑设置"
+                onClick={() => setSettingsOpen(false)}
+                className="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text)]"
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            <label className="flex cursor-pointer items-center justify-between rounded-lg px-1 py-1.5 text-xs">
+              <span className="flex items-center gap-2">
+                <Focus size={13} /> 专注模式
+              </span>
+              <input
+                type="checkbox"
+                checked={focusMode}
+                onChange={(event) => setFocusMode(event.target.checked)}
+                className="accent-[var(--accent)]"
+              />
+            </label>
+            <label className="flex cursor-pointer items-center justify-between rounded-lg px-1 py-1.5 text-xs">
+              <span>打字机模式</span>
+              <input
+                type="checkbox"
+                checked={typewriter}
+                onChange={(event) => setTypewriter(event.target.checked)}
+                className="accent-[var(--accent)]"
+              />
+            </label>
+
+            <SettingRange
+              label="字号"
+              value={editorFontSize}
+              min={12}
+              max={22}
+              step={1}
+              suffix="px"
+              onChange={setEditorFontSize}
+            />
+            <SettingRange
+              label="行高"
+              value={editorLineHeight}
+              min={1.4}
+              max={2.4}
+              step={0.05}
+              onChange={setEditorLineHeight}
+            />
+            <SettingRange
+              label="编辑区宽度"
+              value={editorWidth}
+              min={600}
+              max={1100}
+              step={20}
+              suffix="px"
+              onChange={setEditorWidth}
+            />
+          </div>
+        </>
+      )}
+
       <div className="flex min-h-0 flex-1">
         {viewMode !== 'preview' && (
           <div style={{ flex: viewMode === 'split' ? '1 1 50%' : '1 1 100%' }} className="min-w-0">
@@ -718,6 +1140,11 @@ export function EditorPane({
               onChange={handleChange}
               onSave={() => void saveNow({ force: true })}
               onAttachFiles={(files, position) => void uploadFiles(files, position)}
+              onVisibleLine={syncFromEditor}
+              typewriter={typewriter}
+              fontSize={editorFontSize}
+              lineHeight={editorLineHeight}
+              contentWidth={editorWidth}
             />
           </div>
         )}
@@ -732,10 +1159,12 @@ export function EditorPane({
             className="min-w-0 bg-[var(--bg)]"
           >
             <MarkdownPreview
+              ref={previewRef}
               content={content}
               noteId={note.id}
               linkTitles={linkTitles}
               onWikilink={(title, unresolved) => void openWikilink(title, unresolved)}
+              onVisibleLine={syncFromPreview}
             />
           </div>
         )}
@@ -762,6 +1191,20 @@ export function EditorPane({
         onRestored={handleVersionRestored}
       />
 
+      {pptOpen && (
+        <PptView
+          content={content}
+          noteId={note.id}
+          title={note.title}
+          linkTitles={linkTitles}
+          onWikilink={(title, unresolved) => {
+            setPptOpen(false);
+            void openWikilink(title, unresolved);
+          }}
+          onClose={() => setPptOpen(false)}
+        />
+      )}
+
       <ConflictDialog
         conflict={conflict}
         onLoadDisk={restoreFromDisk}
@@ -769,6 +1212,71 @@ export function EditorPane({
         onClose={() => setConflict(null)}
       />
     </section>
+  );
+}
+
+function FormatButton({
+  title,
+  onClick,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className="shrink-0 rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
+    >
+      {children}
+    </button>
+  );
+}
+
+function FormatDivider() {
+  return <span className="mx-1 h-4 w-px shrink-0 bg-[var(--border)]" aria-hidden />;
+}
+
+function SettingRange({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix = '',
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix?: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="mt-1 block rounded-lg px-1 py-1 text-xs">
+      <span className="flex items-center justify-between">
+        <span className="text-[var(--text-muted)]">{label}</span>
+        <span className="tabular-nums text-[var(--text-faint)]">
+          {Number.isInteger(value) ? value : value.toFixed(2)}
+          {suffix}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="mt-1 w-full accent-[var(--accent)]"
+      />
+    </label>
   );
 }
 

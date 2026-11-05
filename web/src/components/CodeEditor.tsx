@@ -1,4 +1,8 @@
-import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+} from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { bracketMatching, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
@@ -18,11 +22,18 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  type CSSProperties,
   type Ref,
 } from 'react';
+import { slashCompletionSource } from '../lib/slash';
 
 export interface CodeEditorHandle {
   insertText: (text: string, position?: number) => void;
+  wrapSelection: (before: string, after: string, placeholder?: string) => void;
+  toggleHeading: (level: number) => void;
+  toggleLinePrefix: (prefix: string, ordered?: boolean) => void;
+  scrollToLine: (line: number) => void;
+  replaceAll: (value: string) => void;
   focus: () => void;
 }
 
@@ -31,8 +42,13 @@ interface Props {
   onChange: (value: string) => void;
   onSave?: () => void;
   onAttachFiles?: (files: File[], position: number | null) => void;
+  onVisibleLine?: (line: number) => void;
   placeholder?: string;
   readOnly?: boolean;
+  typewriter?: boolean;
+  fontSize?: number;
+  lineHeight?: number;
+  contentWidth?: number;
 }
 
 const highlightStyle = HighlightStyle.define([
@@ -52,21 +68,34 @@ const highlightStyle = HighlightStyle.define([
   { tag: tags.processingInstruction, color: 'var(--text-faint)' },
 ]);
 
+function selectedLines(view: EditorView): { from: number; to: number }[] {
+  const state = view.state;
+  const selection = state.selection.main;
+  const first = state.doc.lineAt(selection.from);
+  const last = state.doc.lineAt(selection.to);
+  const lines: { from: number; to: number }[] = [];
+  for (let number = first.number; number <= last.number; number += 1) {
+    const line = state.doc.line(number);
+    lines.push({ from: line.from, to: line.to });
+  }
+  return lines;
+}
+
 const editorTheme = EditorView.theme({
   '&': {
     height: '100%',
     backgroundColor: 'transparent',
-    fontSize: '15px',
+    fontSize: 'var(--editor-font-size, 15px)',
   },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
     fontFamily: 'var(--font-mono)',
-    lineHeight: '1.75',
+    lineHeight: 'var(--editor-line-height, 1.75)',
     overflow: 'auto',
   },
   '.cm-content': {
     padding: 'var(--editor-padding-y, 2.5rem) var(--editor-padding-x, 2.5rem) 40vh',
-    maxWidth: '860px',
+    maxWidth: 'var(--editor-width, 860px)',
     margin: '0 auto',
     caretColor: 'var(--accent)',
     width: '100%',
@@ -87,13 +116,25 @@ const editorTheme = EditorView.theme({
 });
 
 function CodeEditorInner(
-  { value, onChange, onSave, onAttachFiles, placeholder, readOnly = false }: Props,
+  {
+    value,
+    onChange,
+    onSave,
+    onAttachFiles,
+    onVisibleLine,
+    placeholder,
+    readOnly = false,
+    typewriter = false,
+    fontSize,
+    lineHeight,
+    contentWidth,
+  }: Props,
   ref: Ref<CodeEditorHandle>,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const callbacks = useRef({ onChange, onSave, onAttachFiles });
-  callbacks.current = { onChange, onSave, onAttachFiles };
+  const callbacks = useRef({ onChange, onSave, onAttachFiles, onVisibleLine, typewriter });
+  callbacks.current = { onChange, onSave, onAttachFiles, onVisibleLine, typewriter };
 
   useImperativeHandle(ref, () => ({
     insertText(text, position) {
@@ -106,6 +147,94 @@ function CodeEditorInner(
         changes: { from: pos, insert: text },
         selection: { anchor: pos + text.length },
         scrollIntoView: true,
+      });
+      view.focus();
+    },
+    wrapSelection(before, after, placeholderText) {
+      const view = viewRef.current;
+      if (!view) {
+        return;
+      }
+      const { from, to } = view.state.selection.main;
+      const selected = view.state.sliceDoc(from, to) || placeholderText || '';
+      const insert = before + selected + after;
+      view.dispatch({
+        changes: { from, to, insert },
+        selection: {
+          anchor: from + before.length,
+          head: from + before.length + selected.length,
+        },
+        scrollIntoView: true,
+      });
+      view.focus();
+    },
+    toggleHeading(level) {
+      const view = viewRef.current;
+      if (!view) {
+        return;
+      }
+      const prefix = `${'#'.repeat(level)} `;
+      const changes = selectedLines(view).map((line) => {
+        const text = view.state.sliceDoc(line.from, line.to);
+        const stripped = text.replace(/^#{1,6}\s+/, '');
+        const already = text.startsWith(prefix);
+        return {
+          from: line.from,
+          to: line.from + (text.length - stripped.length),
+          insert: already ? '' : prefix,
+        };
+      });
+      view.dispatch({ changes, scrollIntoView: true });
+      view.focus();
+    },
+    toggleLinePrefix(prefix, ordered = false) {
+      const view = viewRef.current;
+      if (!view) {
+        return;
+      }
+      const lines = selectedLines(view);
+      const existing = (line: { from: number; to: number }) => {
+        const text = view.state.sliceDoc(line.from, line.to);
+        const match = ordered ? /^\d+\.\s+/.exec(text) : text.startsWith(prefix) ? prefix : null;
+        return match?.[0] ?? null;
+      };
+      const allHave = lines.every((line) => existing(line) !== null);
+      const changes = lines.map((line, index) => {
+        const marker = ordered ? `${index + 1}. ` : prefix;
+        const current = existing(line);
+        if (allHave && current) {
+          return { from: line.from, to: line.from + current.length, insert: '' };
+        }
+        if (!allHave && current) {
+          return {
+            from: line.from,
+            to: line.from + current.length,
+            insert: marker,
+          };
+        }
+        return { from: line.from, insert: marker };
+      });
+      view.dispatch({ changes, scrollIntoView: true });
+      view.focus();
+    },
+    scrollToLine(line) {
+      const view = viewRef.current;
+      if (!view) {
+        return;
+      }
+      const number = Math.min(Math.max(1, line + 1), view.state.doc.lines);
+      const target = view.state.doc.line(number);
+      view.dispatch({
+        effects: EditorView.scrollIntoView(target.from, { y: 'start' }),
+      });
+    },
+    replaceAll(next) {
+      const view = viewRef.current;
+      if (!view) {
+        return;
+      }
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: next },
       });
       view.focus();
     },
@@ -130,6 +259,12 @@ function CodeEditorInner(
           rectangularSelection(),
           bracketMatching(),
           closeBrackets(),
+          autocompletion({
+            override: [slashCompletionSource],
+            activateOnTyping: true,
+            icons: false,
+            defaultKeymap: true,
+          }),
           EditorState.allowMultipleSelections.of(true),
           EditorView.lineWrapping,
           markdown(),
@@ -176,13 +311,61 @@ function CodeEditorInner(
             if (update.docChanged) {
               callbacks.current.onChange(update.state.doc.toString());
             }
+
+            if (
+              callbacks.current.typewriter &&
+              (update.docChanged || update.selectionSet)
+            ) {
+              const head = update.state.selection.main.head;
+              window.requestAnimationFrame(() => {
+                const current = viewRef.current;
+                if (!current || !callbacks.current.typewriter) {
+                  return;
+                }
+                const coords = current.coordsAtPos(head);
+                const box = current.scrollDOM.getBoundingClientRect();
+                if (
+                  coords &&
+                  (coords.top < box.top + box.height * 0.3 ||
+                    coords.bottom > box.bottom - box.height * 0.3)
+                ) {
+                  current.dispatch({
+                    effects: EditorView.scrollIntoView(head, { y: 'center' }),
+                  });
+                }
+              });
+            }
           }),
         ],
       }),
     });
 
     viewRef.current = view;
+
+    let lastLine = -1;
+    let frame = 0;
+    const scroller = view.scrollDOM;
+    const onScroll = () => {
+      if (frame) {
+        return;
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const block = view.lineBlockAtHeight(scroller.scrollTop + 12);
+        const line = view.state.doc.lineAt(block.from).number - 1;
+        if (line !== lastLine) {
+          lastLine = line;
+          callbacks.current.onVisibleLine?.(line);
+        }
+      });
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+
     return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
       view.destroy();
       viewRef.current = null;
     };
@@ -203,7 +386,20 @@ function CodeEditorInner(
     });
   }, [value]);
 
-  return <div ref={hostRef} className="h-full overflow-hidden" data-testid="code-editor" />;
+  return (
+    <div
+      ref={hostRef}
+      className="h-full overflow-hidden"
+      data-testid="code-editor"
+      style={
+        {
+          '--editor-font-size': `${fontSize ?? 15}px`,
+          '--editor-line-height': String(lineHeight ?? 1.75),
+          '--editor-width': `${contentWidth ?? 860}px`,
+        } as CSSProperties
+      }
+    />
+  );
 }
 
 export const CodeEditor = forwardRef(CodeEditorInner);

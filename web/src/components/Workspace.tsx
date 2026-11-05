@@ -29,6 +29,7 @@ export function Workspace() {
   const listOpen = useUiStore((state) => state.listOpen);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const toggleList = useUiStore((state) => state.toggleList);
+  const focusMode = useUiStore((state) => state.focusMode);
   const setPanels = useUiStore((state) => state.setPanels);
   const sort = useUiStore((state) => state.sort);
   const setSort = useUiStore((state) => state.setSort);
@@ -275,6 +276,9 @@ export function Workspace() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (document.querySelector('[data-ppt-open="true"]')) {
+        return;
+      }
       if (!isMod(event)) {
         return;
       }
@@ -351,7 +355,9 @@ export function Workspace() {
     window.addEventListener('pointerup', onUp, { once: true });
   }
 
-  const overlayOpen = isNarrow && (sidebarOpen || listOpen);
+  const sidebarVisible = sidebarOpen && !focusMode;
+  const listVisible = listOpen && !focusMode;
+  const overlayOpen = isNarrow && (sidebarVisible || listVisible);
   const effectiveViewMode = isNarrow && viewMode === 'split' ? 'editor' : viewMode;
 
   return (
@@ -365,7 +371,7 @@ export function Workspace() {
         />
       )}
 
-      {sidebarOpen && (
+      {sidebarVisible && (
         <div
           className={isNarrow ? 'fixed inset-y-0 left-0 z-40 w-[250px] shadow-2xl' : 'shrink-0'}
           style={isNarrow ? undefined : { width: sidebarWidth }}
@@ -380,7 +386,7 @@ export function Workspace() {
           />
         </div>
       )}
-      {sidebarOpen && !isNarrow && (
+      {sidebarVisible && !isNarrow && (
         <div
           role="separator"
           aria-orientation="vertical"
@@ -392,7 +398,7 @@ export function Workspace() {
         </div>
       )}
 
-      {listOpen && (
+      {listVisible && (
         <div
           className={
             isNarrow ? 'fixed inset-y-0 left-0 z-30 w-[min(86vw,330px)] shadow-2xl' : 'shrink-0'
@@ -416,7 +422,7 @@ export function Workspace() {
           />
         </div>
       )}
-      {listOpen && !isNarrow && (
+      {listVisible && !isNarrow && (
         <div
           role="separator"
           aria-orientation="vertical"
