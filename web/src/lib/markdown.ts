@@ -67,7 +67,7 @@ for (const [name, language, aliases] of LANGUAGES) {
 }
 
 const md = new MarkdownIt({
-  html: false,
+  html: true,
   linkify: true,
   breaks: false,
   typographer: false,
@@ -471,7 +471,7 @@ md.core.ruler.after('inline', 'task-lists', (state) => {
 
 function sanitize(html: string): string {
   return DOMPurify.sanitize(html, {
-    ADD_TAGS: ['audio'],
+    ADD_TAGS: ['audio', 'video', 'source'],
     ADD_ATTR: [
       'target',
       'rel',
@@ -479,6 +479,13 @@ function sanitize(html: string): string {
       'decoding',
       'controls',
       'preload',
+      'loop',
+      'autoplay',
+      'muted',
+      'width',
+      'height',
+      'poster',
+      'type',
       'aria-label',
       'aria-hidden',
       'data-wikilink',
@@ -493,6 +500,34 @@ function sanitize(html: string): string {
   });
 }
 
+/**
+ * Resolves raw `<img>`, `<audio>`, `<video>` and `<source>` URLs authored as
+ * i/ or files/ paths. Markdown images are handled by the renderer; this covers
+ * the HTML templates from `/img` and `/video`, which MiaoYan also supports.
+ */
+function rewriteEmbeddedSources(html: string, noteId: string): string {
+  if (!noteId) {
+    return html;
+  }
+
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  for (const element of template.content.querySelectorAll<HTMLElement>(
+    'img[src], audio[src], video[src], source[src]',
+  )) {
+    const source = element.getAttribute('src');
+    if (!source) {
+      continue;
+    }
+    element.setAttribute('src', rewriteSource(source, noteId));
+    if (element.tagName === 'IMG') {
+      element.setAttribute('loading', 'lazy');
+      element.setAttribute('decoding', 'async');
+    }
+  }
+  return template.innerHTML;
+}
+
 export function renderMarkdown(
   content: string,
   noteId: string,
@@ -504,7 +539,7 @@ export function renderMarkdown(
     skipHighlight: options?.skipHighlight,
     linkTitles: linkTitles ? new Set([...linkTitles].map((title) => title.toLowerCase())) : undefined,
   });
-  return sanitize(html);
+  return rewriteEmbeddedSources(sanitize(html), noteId);
 }
 
 /**

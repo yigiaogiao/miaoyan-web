@@ -11,8 +11,20 @@ interface SlashTemplate {
   cursor?: number;
 }
 
+function pad(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function currentTimestamp(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+
 function templates(): SlashTemplate[] {
   const today = new Date().toISOString().slice(0, 10);
+  const image = '<img src="" width="800">';
+  const video =
+    '<video width="800px" preload="metadata" loop autoplay controls muted><source src="" type="video/mp4"></video>';
   return [
     { key: 'h1', label: t('slash.h1'), detail: '# ', insert: '# ' },
     { key: 'h2', label: t('slash.h2'), detail: '## ', insert: '## ' },
@@ -65,8 +77,46 @@ function templates(): SlashTemplate[] {
       detail: t('slash.pptDetail'),
       insert: t('slash.pptContent'),
     },
+    {
+      key: 'plantuml',
+      label: t('slash.plantuml'),
+      detail: '```plantuml',
+      insert: t('slash.plantumlContent'),
+    },
+    {
+      key: 'fold',
+      label: t('slash.fold'),
+      detail: t('slash.foldDetail'),
+      insert: t('slash.foldContent'),
+    },
+    {
+      key: 'task',
+      label: t('slash.task'),
+      detail: t('slash.taskDetail'),
+      insert: t('slash.taskContent'),
+    },
     { key: 'divider', label: t('slash.divider'), detail: '---', insert: '---\n' },
     { key: 'date', label: t('slash.date'), detail: today, insert: today },
+    {
+      key: 'time',
+      label: t('slash.time'),
+      detail: 'yyyy-MM-dd HH:mm:ss',
+      insert: currentTimestamp(),
+    },
+    {
+      key: 'img',
+      label: t('slash.img'),
+      detail: t('slash.imgDetail'),
+      insert: image,
+      cursor: image.indexOf('src=""') + 5,
+    },
+    {
+      key: 'video',
+      label: t('slash.video'),
+      detail: t('slash.videoDetail'),
+      insert: video,
+      cursor: video.indexOf('src=""') + 5,
+    },
     {
       key: 'link',
       label: t('slash.link'),

@@ -40,6 +40,7 @@ import {
   ScanText,
   Settings2,
   Sigma,
+  SpellCheck,
   Strikethrough,
   Sun,
   Table2,
@@ -55,6 +56,7 @@ import { exportHtml, exportMarkdown, exportPdf } from '../lib/export';
 import { tidyMarkdown } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import { extractHeadings } from '../lib/markdown';
+import { cleanTypography } from '../lib/typography';
 import { formatRelativeTime, isMod } from '../lib/utils';
 import { useToastStore } from '../store/toast';
 import { useUiStore } from '../store/ui';
@@ -508,6 +510,7 @@ export function EditorPane({
   );
 
   const words = useMemo(() => countWords(content), [content]);
+  const readingMinutes = Math.max(1, Math.ceil(words / 300));
   const headings = useMemo(() => extractHeadings(content), [content]);
 
   const handleTidy = useCallback(() => {
@@ -518,6 +521,16 @@ export function EditorPane({
     }
     editorRef.current?.replaceAll(next);
     toast(t('editor.tidyDone'), 'success');
+  }, [toast, t]);
+
+  const handleCleanTypography = useCallback(() => {
+    const next = cleanTypography(contentRef.current);
+    if (next === contentRef.current) {
+      toast(t('editor.typographyAlready'), 'info');
+      return;
+    }
+    editorRef.current?.replaceAll(next);
+    toast(t('editor.typographyDone'), 'success');
   }, [toast, t]);
 
   const handleExportHtml = useCallback(async () => {
@@ -656,7 +669,8 @@ export function EditorPane({
             <span className="truncate font-medium text-[var(--text)]">{note.title}</span>
           </div>
           <div className="text-[11px] text-[var(--text-faint)]">
-            {formatRelativeTime(note.modifiedAt)} · {t('editor.words', { count: words })}
+            {formatRelativeTime(note.modifiedAt)} · {t('editor.words', { count: words })} ·{' '}
+            {t('editor.readingTime', { minutes: readingMinutes })}
             {uploading > 0 && ` · ${tn('editor.uploading', uploading)}`}
           </div>
         </div>
@@ -984,6 +998,9 @@ export function EditorPane({
             <Minus size={15} />
           </FormatButton>
           <span className="flex-1" />
+          <FormatButton title={t('format.typography')} onClick={handleCleanTypography}>
+            <SpellCheck size={15} />
+          </FormatButton>
           <FormatButton title={t('format.tidy')} onClick={handleTidy}>
             <Wand2 size={15} />
           </FormatButton>
