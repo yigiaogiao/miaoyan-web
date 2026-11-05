@@ -30,6 +30,7 @@ builder.Services.AddSingleton<NoteIndexService>();
 builder.Services.AddSingleton<VaultService>();
 builder.Services.AddSingleton<VaultWatcher>();
 builder.Services.AddSingleton<CapabilitiesService>();
+builder.Services.AddSingleton<PlantUmlRenderer>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<VaultResolutionExceptionHandler>();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
@@ -149,6 +150,7 @@ app.MapGet("/healthz", (VaultRegistry v, CapabilitiesService c) =>
 });
 
 app.MapGet("/api/health", () => Results.Redirect("/healthz"));
+app.MapRenderApi();
 app.MapVaultApi();
 
 app.MapFallback("/api/{**path}", (HttpContext context) => Results.Json(
