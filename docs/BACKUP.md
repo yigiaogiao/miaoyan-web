@@ -6,7 +6,7 @@
 
 | 路径 | 必选 | 内容 |
 |---|---|---|
-| 书库根目录 | 是 | `.md`、`i/`、`files/`，以及 `.miaoyan/trash`、`.miaoyan-conflicts` |
+| 书库根目录 | 是 | `.md`、`i/`、`files/`，以及 `.miaoyan/trash`、`.miaoyan/trash-assets`、`.miaoyan-conflicts` |
 | `/data/state` 或 `/lzcapp/var/miaoyan` | 否 | SQLite 索引、版本历史、缓存。索引可重建；版本历史重建后丢失 |
 | 环境变量 | 建议 | 密码、API key、上传上限等部署配置 |
 
@@ -41,8 +41,9 @@ sqlite3 /srv/miaoyan/state/index.db ".backup '/backup/index.db'"
 
 ### 导出
 
-M3 起提供应用内导出：单篇 Markdown/HTML、PPT，整个书库 zip 在 M5。导出适合迁移，不替代
-完整目录备份（导出会忽略冲突备份和版本历史）。
+应用内导出：单篇 Markdown/HTML、PPT，以及侧栏的「导出书库 (zip)」（`GET /api/export/vault`）。
+zip 便于迁移，但会省略 `.miaoyan*`（回收站、清理暂存）和 `.miaoyan-conflicts`，也不包含
+状态目录里的版本历史，因此不替代完整目录备份。
 
 ## 恢复
 
@@ -74,6 +75,10 @@ M3 起提供应用内导出：单篇 Markdown/HTML、PPT，整个书库 zip 在 
 `删除` 把笔记移入 `.miaoyan/trash/<timestamp>/` 并写入 `meta.json`（原路径、标题、删除时间）。
 回收站不会自动清理，条目一直保留，直到你在应用内彻底删除或手动删掉 `.miaoyan/trash`。
 恢复使用应用内操作；直接复制文件回原目录也可以，但索引会在下次扫描时更新。
+
+「清理未使用附件」不会永久删除文件：未被任何笔记（含回收站笔记）引用的附件会被移到
+`.miaoyan/trash-assets/<timestamp>/`，保留原来的相对目录结构，误清理时可以手工搬回。
+该目录不会自动删除；确认不再需要后可手动清理，它也不会进入 zip 导出。
 
 ## 版本历史
 

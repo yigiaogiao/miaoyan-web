@@ -4,7 +4,7 @@
 
 笔记就是普通的 `.md` 文件，目录就是项目，数据始终在自己手里。本项目是独立实现，不修改妙言或 Papyra 的源码。
 
-> 当前状态：**M4 Papyra 兼容与入库完成**。可以直接指向一份现有的妙言书库，浏览、编辑、保存和添加附件；wikilink、反向链接、全文搜索、命令面板、版本历史/对比/恢复、置顶、副本、排序和拖动移动均已可用；数学公式、Mermaid/PlantUML/Markmap、代码高亮、图片灯箱、音频、专注/打字机模式、大纲、格式工具栏、PPT 演示和 Markdown/HTML/PDF 导出也已可用。`papyra-ingest` 可以不改代码，通过兼容 API 创建/更新笔记、上传图片和音频；笔记 frontmatter 中的托管 `id` 在重命名/移动后仍然有效。进度见 [PLAN.md](PLAN.md)，与妙言的功能对照见 [COMPATIBILITY.md](COMPATIBILITY.md)。
+> 当前状态：**M5 发布候选**。可以直接指向一份现有的妙言书库，浏览、编辑、保存和添加附件；wikilink、反向链接、全文搜索、命令面板、版本历史/对比/恢复、置顶、副本、排序和拖动移动均已可用；数学公式、Mermaid/PlantUML/Markmap、代码高亮、图片灯箱、音视频、专注/打字机模式、大纲、格式工具栏、PPT 演示和 Markdown/HTML/PDF/书库 zip 导出也已可用。`papyra-ingest` 可以不改代码，通过兼容 API 创建/更新笔记、上传图片和音频；笔记 frontmatter 中的托管 `id` 在重命名/移动后仍然有效。M5 补齐了中英文界面、密码与 API key 鉴权、可选本地 OCR/转写、排版清理、未使用附件清理和 10k 笔记性能验证。进度见 [PLAN.md](PLAN.md)，与妙言的功能对照见 [COMPATIBILITY.md](COMPATIBILITY.md)。
 
 ## 现在能做什么
 
@@ -20,7 +20,10 @@
 - 预览支持 KaTeX 行内/块级公式、Mermaid、Markmap、GitHub alerts、脚注、代码高亮与一键复制、图片灯箱和内联音频。PlantUML 只调用容器内的本地 JAR，不会把笔记内容发到公共渲染服务；未安装时在代码块内明确提示。
 - PPT 演示：`---` 分页，支持开头配置注释、`.slide:` 背景、`.element:` 片段和原始 HTML 布局；⌘⌥P 打开，Esc 退出，可全屏或打印为 PDF。
 - 专注模式 / 打字机模式、字号/行高/编辑宽度设置（均持久化）、大纲跳转、格式工具栏、`/` 快捷模板和 Markdown 整理；分栏时编辑区与预览双向滚动同步。
-- 导出 Markdown（字节一致）、独立 HTML（内联样式、KaTeX、图表与本地图片）和 PDF（浏览器打印）；PPT 可打印为 PDF。
+- 导出 Markdown（字节一致）、独立 HTML（内联样式、KaTeX、图表与本地图片）、PDF（浏览器打印）和整个书库 zip；PPT 可打印为 PDF。
+- 未使用附件清理：扫描全部笔记后把无引用文件移到 `.miaoyan/trash-assets`，可恢复。
+- 中英文界面（默认中文，可在设置切换）；可选本地 OCR / 音频转写，命令只从环境变量读取，不经过 shell。
+- 独立部署可设置网页密码和 API key；懒猫保持网关登录。可选大笔记性能门限：超过 1 MB 或 5000 行时自动降级高亮。
 - Papyra 兼容 API：`papyra-ingest` 可直接创建/更新笔记（`If-Match` 冲突重试）、上传图片/音频；媒体按内容哈希去重，重复发布不会重复上传；`GET /api/media/{filename}` 提供预览，`/note/{id}` 直接打开笔记。
 - 亮色 / 暗色 / 跟随系统主题，移动端自动切换为单栏。
 - `GET /healthz`：返回版本、书库模式、SQLite/FTS5 能力、PlantUML/ffmpeg 等可选能力。
@@ -71,7 +74,8 @@ docker compose up -d --build
 
 - 书库卷：`miaoyan-library` → `/data/Miaoyan`
 - 可重建状态卷：`miaoyan-state` → `/data/state`
-- 如果端口暴露在不可信网络，请设置 `MIAOYAN_WEB_PASSWORD`（认证在 M5 完成，当前仅预留）。
+- 如果端口暴露在不可信网络，请设置 `MIAOYAN_WEB_PASSWORD`（网页登录）或
+  `MIAOYAN_API_KEY`（机器调用）；两者都为空时不拦截请求。
 - 更多环境变量、备份与反向代理配置见 [docs/DEPLOY.md](docs/DEPLOY.md)。
 
 ## 懒猫微服

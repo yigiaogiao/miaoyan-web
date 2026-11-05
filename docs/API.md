@@ -1,7 +1,9 @@
 # API
 
-所有接口同源，无需 CORS。除 `/healthz` 外，懒猫请求由网关注入受信任的 `X-HC-User-ID`；
-独立部署可通过会话（M5）或 `MIAOYAN_API_KEY` 授权。错误统一返回 JSON：
+所有接口同源，无需 CORS。除 `/healthz` 和 `/api/auth/*` 外，懒猫请求由网关注入受信任的
+`X-HC-User-ID`；独立部署设置 `MIAOYAN_WEB_PASSWORD` 或 `MIAOYAN_API_KEY` 后启用鉴权：
+浏览器用密码登录获得 HMAC 会话 cookie，机器客户端发送 `X-API-Key`。未配置任何凭据时
+（懒猫的默认形态）不拦截请求。错误统一返回 JSON：
 
 ```json
 { "error": "code", "message": "human readable detail" }
@@ -31,6 +33,19 @@
 ```
 
 `/api/health` 302 到 `/healthz`。健康检查不解析用户，因此无需请求头。
+
+### 鉴权（M5）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/auth/status` | `{required, authenticated, password, apiKey}`；SPA 启动时用它决定是否显示登录页 |
+| `POST` | `/api/auth/login` | `{secret}`；密码或 API key 均可登录。失败返回 401，同一 IP 5 分钟内失败 8 次后返回 429 |
+| `POST` | `/api/auth/logout` | 清除会话 cookie |
+
+- 常量时间比较；`MIAOYAN_WEB_PASSWORD` / `MIAOYAN_API_KEY` 为空时不启用对应入口。
+- 会话是 HMAC 签名的无状态 cookie（30 天），密钥保存在 `state/.auth-secret`；状态目录保留则重启不掉线。
+- 使用 cookie 的写请求会校验 `Origin` 与当前站点一致，跨站写返回 403；带 `X-API-Key` 的机器调用不受此限制。
+- 日志只记录凭据是否配置，不记录密码、API key、cookie 或笔记正文。
 
 ### 用户与书库解析
 
@@ -73,6 +88,11 @@ Papyra 兼容层写入的笔记会在 frontmatter 里带一个托管 `id`。该 
 | `POST` | `/api/notes/{id}/versions/{versionId}/restore` | `{etag?}` 恢复；当前内容先存为版本；返回恢复后的笔记 |
 | `POST` | `/api/notes/{id}/assets?kind=image\|file` | multipart 字段 `file`；返回 `AssetDto` |
 | `GET` | `/api/notes/{id}/assets/{**path}` | 读取笔记目录下 `i/` 或 `files/` 中的附件，支持 Range |
+| `POST` | `/api/notes/{id}/ocr` | `{path}`；调用配置好的本地 OCR 命令，返回 `{kind:"ocr", text}`；未配置返回 503 |
+| `POST` | `/api/notes/{id}/transcribe` | `{path}`；对音频或视频调用本地转写命令，返回 `{kind:"transcribe", text}`；未配置返回 503 |
+| `GET` | `/api/maintenance/unused-assets` | 扫描全部笔记，返回 `{scannedNotes, files}`；`files` 是未被引用的 `i/`、`files/` 相对路径。任一笔记读取失败则返回 500 且不建议清理 |
+| `POST` | `/api/maintenance/unused-assets/clean` | 重新扫描并把未引用附件移到 `.miaoyan/trash-assets/<timestamp>/`，返回 `{removed, failed}` |
+| `GET` | `/api/export/vault` | 流式下载 `MiaoYan-export-YYYYMMDD.zip`；跳过 `.miaoyan*`、其他点目录、`node_modules` 与符号链接 |
 | `GET` | `/api/trash` | 回收站条目（笔记与项目） |
 | `POST` | `/api/trash/{id}/restore` | `{kind, noteId?, projectId?}`；重名时恢复到副本名 |
 | `DELETE` | `/api/trash/{id}` | 彻底删除，返回 204 |
@@ -236,8 +256,10 @@ data: {"kind":"note|project|trash","noteId":"n...","path":"工作/x.md","at":"..
 
 ### 导出
 
-导出在浏览器端完成（Markdown/HTML/PDF/PPT），没有服务端导出接口，因此不暴露
-`/api/export/*`。完整书库的 zip 导出属于 M5。
+单篇 Markdown/HTML/PDF 与 PPT 在浏览器端完成；完整书库由 `GET /api/export/vault`
+在服务端打包下载。zip 内是书库根目录下的普通文件，应用自己的 `.miaoyan`（回收站、
+清理暂存）和 `.miaoyan-conflicts` 不会进入导出；需要完整备份时仍应复制目录（见
+[BACKUP.md](BACKUP.md)）。
 
 ## Papyra 兼容 API（M4，已完成）
 
@@ -269,8 +291,9 @@ data: {"kind":"note|project|trash","noteId":"n...","path":"工作/x.md","at":"..
   其他 frontmatter 键逐行保留。
 - `POST /api/media/upload` 只接受白名单扩展名（常见图片、音频、视频和文档），
   响应带 CSP `sandbox`，防止上传的 HTML/SVG 成为脚本源。
-- `X-API-Key` 目前被接受但不校验；`MIAOYAN_API_KEY` 的常量时间校验在 M5 完成。
-  懒猫部署由网关注入的 `X-HC-User-ID` 提供用户隔离。
+- 设置 `MIAOYAN_API_KEY` 后，所有 `/api/*`（健康检查与 `/api/auth/*` 除外）都要求
+  `X-API-Key` 常量时间匹配；未设置时不校验。懒猫部署由网关注入的 `X-HC-User-ID`
+  提供用户隔离，通常不设置该变量。
 - `archived=true` 会写入 frontmatter 并在 API 返回，但原生 UI 暂未提供归档视图。
 - 没有实现 Papyra 的完整分类管理（例如 `DELETE /api/categories?fromNotes=true`
   同时移除笔记 tag）；当前 DELETE 只清除注册颜色。

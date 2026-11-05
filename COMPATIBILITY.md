@@ -31,6 +31,14 @@ scroll sync, and Markdown/HTML/PDF export are implemented. Browser checks:
 stepping, speaker notes/zoom plugins, iframe backgrounds, and the fact that the
 exported HTML references KaTeX fonts at the app's absolute URL.
 
+**M5 status (2026-11-05):** optional local OCR/Whisper, constant-time password
+and API-key auth, large-note gates, word count/reading time, MiaoYan's
+typography cleaner, the remaining slash templates, unused-attachment cleanup,
+whole-vault zip export, and Chinese/English UI are implemented. The 10k-note
+benchmark met every target. Server suite 47/47. The real LazyCat container
+mount and `.lpk` install remain the first release-checklist items because no
+container runtime was available on this workstation.
+
 **M4 status (2026-11-05):** the Papyra-compatible subset used by
 `papyra-ingest` is implemented and was exercised with the real client against a
 local instance. Notes created by the API carry a small managed frontmatter
@@ -95,16 +103,16 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | Active line, bracket matching, undo/redo | Bracket matching, undo/redo, multiple selections; active line is deliberately unhighlighted for a quieter canvas | Partial (M1) |
 | Search/replace in editor (⌘F) | CodeMirror search panel; browser find remains available via ⌘F when focus is outside the editor | Done (M1) |
 | Autosave (debounced) | 650 ms debounce, status 未保存/正在保存/已保存/有冲突; flushes on note switch and `pagehide` | Done (M1) |
-| Typing performance gates (1 MB, 5000 lines) | > 1 MB: skip syntax highlighting and auto diagram render; > 5000 lines: simplified highlight | Planned (M5) |
+| Typing performance gates (1 MB, 5000 lines) | > 1 MB: skip syntax highlighting and auto diagram render; > 5000 lines: simplified highlight and no `/` menu | Done (M5) |
 | Toolbar formatting (bold, italic, strikethrough, code, link, image, etc.) | H1–H3, bold, italic, strikethrough, inline code, link, quote, bullet/ordered/task list, table, math, divider, tidy, plus a `/` hint; images are inserted by paste/drag rather than a toolbar button | Partial (M3) |
-| Slash templates + Tab (`/table`, `/task`, `/time`, `/img`, `/video`, `/mermaid`, `/plantuml`, `/markmap`, `/fold`) | `/` opens a CodeMirror menu for headings, lists, task, quote, code, table, math, Mermaid, Markmap, alert, PPT divider, link and date; `/time`, `/img`, `/video`, `/plantuml`, `/fold` are not in the menu | Partial (M3) |
-| Word count / reading time | Not yet shown | Planned (M5) |
+| Slash templates + Tab (`/table`, `/task`, `/time`, `/img`, `/video`, `/mermaid`, `/plantuml`, `/markmap`, `/fold`) | `/` opens a CodeMirror menu with MiaoYan's templates (and extra headings/lists/date/alert/PPT entries): `/time`, `/table`, `/task`, `/img`, `/video`, `/plantuml`, `/fold`, `/mermaid`, `/markmap`, plus `/h1`–`/h3`, `/ul`, `/ol`, `/quote`, `/code`, `/math`, `/alert`, `/ppt`, `/divider`, `/date`, `/link` | Done (M5) |
+| Word count / reading time | Word count and an estimated reading time in the editor header | Done (M5) |
 | TOC / outline (⌘5) | Outline drawer in preview and editor; click to jump | Done (M3) |
 | Focus mode / typewriter mode | Both; persisted per browser; focus hides both side columns and Esc/⌘⇧F exits | Done (M3) |
 | Font size / line height / editor width settings | Same; persisted | Done (M3) |
 | Auto-format (⇧⌘L, Prettier-like) | Tidy command normalises headings, list markers, blank runs and trailing spaces while leaving code fences, math and frontmatter intact; it is not a full Prettier port | Substituted (M3) |
 | Native CJK IME handling | Browser IME; CodeMirror handles composition events correctly | Substituted |
-| Smart typography cleaning | Not yet implemented | Planned (M5) |
+| Smart typography cleaning | Format-bar action ports MiaoYan's `TypographyCleaner`: pangu spacing, fullwidth punctuation, em-dash/ellipsis normalisation and blank-run collapse, while protecting code, math, link targets, wikilinks, URLs, frontmatter and hard breaks | Done (M5) |
 
 ## 4. Preview and rendering
 
@@ -195,11 +203,11 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | Drag image/file | Drag/drop into the editor, inserted at the drop position; other files become `[name](files/name)` | Done (M1) |
 | Root-relative `/i/...` references | Same in Markdown; the Web resolver maps them to the note-relative `/api/notes/{id}/assets/...` endpoint | Done (M1) |
 | Path traversal / symlink escape | Asset names sanitised; resolved path must stay inside the note's `i`/`files` directory; symlinks rejected | Done (M1) |
-| Media cleanup for unused attachments | "Clean unused attachments" scans all note bodies before deleting; off by default | Planned (M5) |
+| Media cleanup for unused attachments | Sidebar action scans every note body (including Trash references by filename), then moves unreferenced files from `i/` and `files/` to `.miaoyan/trash-assets/<timestamp>/`; the scan aborts if any note cannot be read | Done (M5; app trash instead of the OS Trash) |
 | Audio attachment playback | Inline player in preview | Done (M3) |
-| Video support | Not stored; audio extraction + transcript (optional ffmpeg) | Substituted |
-| OCR images | Optional local `tesseract` command, off by default, managed block or sidecar | Planned (M5) |
-| Whisper transcription | Optional local command, off by default, background job | Planned (M5) |
+| Video support | Raw `<video>`/`<source>` HTML plays in preview (relative `i/`/`files/` paths resolve to the asset endpoint); uploaded video stays in `files/`; no ffmpeg audio extraction is needed because transcription reads the video directly | Done (M5) |
+| OCR images | Optional local `tesseract` command (`MIAOYAN_OCR_CMD`), off by default; Format/settings action inserts the text at the cursor | Done (M5; opt-in) |
+| Whisper transcription | Optional local command (`MIAOYAN_WHISPER_CMD`), audio or video, 10-minute timeout; the transcript is inserted at the cursor | Done (M5; opt-in) |
 | URL/text ingestion (Papyra ecosystem) | Not built in; `papyra-ingest` works through the compatibility API, including local media uploads and repeated publishes | Done (M4) |
 
 ## 11. Import / export
@@ -211,7 +219,7 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | Export note (Markdown) | Byte-faithful `.md` download | Done (M3) |
 | Export HTML | One standalone HTML file with inline CSS, KaTeX CSS, rendered diagrams and same-origin images inlined as data URLs; remote images stay remote; KaTeX font URLs point at the running app | Done (M3) |
 | Export PDF | A print window with the same standalone HTML, then the browser's “Save as PDF” dialog; no bundled Chromium | Substituted (M3) |
-| Export all | Zip of the vault (excluding `.miaoyan*` and state) | Planned (M5) |
+| Export all | Sidebar download streams `MiaoYan-export-<date>.zip`; walks the vault skipping dot-directories, `node_modules` and symlinks, so app trash/conflicts and state are excluded | Done (M5) |
 | Swap library folder | Settings -> vault path is fixed by env in v1 (single library); import wizard supports merging | Partial (v1) |
 
 ## 12. Papyra-compatible API
@@ -226,7 +234,7 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | GET | `/api/search?q=` | `[{id,title,snippet,score,…}]`; score descends with result order | Done (M4) |
 | POST | `/api/categories` | `{name,color}` idempotent upsert; GET unions registered tags with tags found in notes; DELETE removes the registry colour only | Done (M4) |
 | GET | `/note/{id}` | SPA note route; resolves native and managed ids through `GET /api/notes/{id}` | Done (M4) |
-| Auth | `X-API-Key` | Accepted but not enforced in M4; constant-time enforcement against `MIAOYAN_API_KEY` is M5. LazyCat's signed user gateway is the v1 isolation boundary | Partial (M5) |
+| Auth | `X-API-Key` | Constant-time check against `MIAOYAN_API_KEY` when configured; browsers can also log in with `MIAOYAN_WEB_PASSWORD`, which issues an HMAC session cookie (rate-limited, Origin-checked writes). Unset credentials keep LazyCat passwordless behind the signed user gateway | Done (M5) |
 
 Acceptance: real `papyra-ingest` publishes text and a local image, updates the
 same note on re-publish, shows the uploaded image, and does not create
@@ -312,7 +320,7 @@ and marks unavailable browser-reserved ones.
 | Native upgrade (Sparkle) | LazyCat store upgrade / container image pull | M0 manifest + docs |
 | Library folder chosen in Preferences | `MIAOYAN_LIBRARY` or auto-discovery | M0; explicit value pins a single library |
 | Local-only data | Notes in `/lzcapp/documents`, rebuildable state in `/lzcapp/var` | M0; state loss never loses notes |
-| No login (macOS user session) | LazyCat ingress authentication; no in-app login | M0; standalone password planned M5 |
+| No login (macOS user session) | LazyCat ingress authentication; no in-app login unless `MIAOYAN_WEB_PASSWORD` is set for a standalone deployment | Done (M5) |
 | Retina 60fps native preview | Browser rendering, line-anchored scroll sync | M3; same task, not identical rendering |
 | Multiple windows | Browser tabs, one note per tab | Accepted substitution |
 | Menu bar / Dock | LazyCat launcher and in-app menus | Accepted substitution |
@@ -346,4 +354,12 @@ App-store constraints that shape the implementation:
 - [ ] Present a deck; exit; print to PDF.
 - [ ] Upload/paste an image and an audio file; play audio inline.
 - [ ] Run `papyra-ingest` twice on the same source; no duplicate note.
-- [ ] 10k-note library opens, searches, and scrolls within targets.
+- [x] 10k-note API targets: cold list 378 ms, warm list 22 ms, full-body list
+      94 ms, warm 2-char search 20 ms, 4-char search 28 ms, note fetch 4 ms.
+      Browser scroll smoothness on the same library remains a manual check.
+- [ ] Real LazyCat container: `/lzcapp/documents/<uid>` mount, `.lpk` install,
+      passwordless gateway entry, upgrade persistence.
+- [x] Unused-attachment cleanup keeps referenced files and moves an orphan to
+      `.miaoyan/trash-assets` (server test).
+- [x] Whole-vault zip export includes notes and excludes dot-directories
+      (server test).

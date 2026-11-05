@@ -1,6 +1,6 @@
 # MiaoYan Web — Implementation Plan
 
-> Status: M4 complete (2026-11-05); M5 next. This file is the contract for the
+> Status: M5 complete (2026-11-05); release candidate. This file is the contract for the
 > project; update it when a decision changes, and keep `COMPATIBILITY.md` in sync
 > with user-visible behaviour.
 
@@ -561,11 +561,28 @@ same file id and media (`reused:1`), and none of the republishes created a
 duplicate note. `COMPATIBILITY.md` records that hidden `archive=true` is stored
 in frontmatter but has no UI yet, and that API-key enforcement remains M5.
 
-### M5 — optional features and release
+### M5 — optional features and release — **done 2026-11-05**
 
-Optional OCR/Whisper/video-audio, performance and security hardening, lpk
-release, docs, backup/restore. Acceptance: 10k-note perf targets; security
-checklist; installable `.lpk`; docs complete.
+Delivered: optional local OCR/Whisper commands (argv-only, configured by env,
+`/api/notes/{id}/ocr` and `/transcribe` with editor actions); constant-time
+standalone password and API-key authentication with HMAC session cookies,
+login rate limiting and Origin checks for cookie writes; large-note gates
+(> 1 MB skips highlighting and diagram auto-render, > 5000 lines uses a compact
+highlight and no `/` menu); word count and reading time; a port of MiaoYan's
+typography cleaner; the complete `/time`, `/table`, `/task`, `/img`, `/video`,
+`/mermaid`/`/markmap`/`/plantuml`/`/fold` slash templates; unused-attachment cleanup that
+moves files to `.miaoyan/trash-assets`; whole-vault zip export; Chinese/English
+UI; and the remaining docs.
+
+Measured on a generated 10,000-note library (`scripts/bench-10k.sh`): cold
+summary list 378 ms, warm list 22 ms, full-body list 94 ms, cold two-character
+search 577 ms, warm search 20 ms, four-character search 28 ms, note fetch 4 ms —
+all within the targets below.
+
+Release checklist still requiring a real LazyCat container: verify the
+`/lzcapp/documents/<uid>` mount, install the `.lpk`, confirm passwordless entry
+through the gateway, and check upgrade persistence. These cannot be exercised
+on this workstation and are recorded in `COMPATIBILITY.md`.
 
 ## 12. Working agreement
 
@@ -611,3 +628,13 @@ checklist; installable `.lpk`; docs complete.
 | 2026-11-05 | Categories live in disposable `state/categories.json`, unioned with note tags | Papyra clients can register a tag before its first note; losing the file only loses colours |
 | 2026-11-05 | `/api/media` serves an allowlist of image/audio/video/document extensions and sets CSP `sandbox` | Uploaded HTML/SVG must not become a scripting origin inside the app |
 | 2026-11-05 | API-key enforcement is M5, not M4 | LazyCat's signed `X-HC-User-ID` gateway already isolates users; the compatibility endpoints must first be validated end to end. M5 adds a constant-time check for standalone deployments |
+| 2026-11-05 | Auth is enabled only when `MIAOYAN_WEB_PASSWORD` or `MIAOYAN_API_KEY` is set; LazyCat stays passwordless | The store requires entry through the gateway; standalone deployments opt into protection explicitly, so an upgrade cannot lock a working LazyCat install out |
+| 2026-11-05 | Sessions are stateless HMAC cookies keyed by `state/.auth-secret` | No session table or Redis; a container restart keeps users signed in while state survives, and deleting state only forces a re-login |
+| 2026-11-05 | Cookie-authenticated writes require a same-origin `Origin` header; API-key writes do not | The API key is not ambient in a browser, so CSRF only applies to the cookie; non-browser clients often omit `Origin` |
+| 2026-11-05 | OCR/Whisper commands come only from configuration and are split into argv tokens, never a shell | Note paths are attacker-controlled; a shell would turn a filename into command execution |
+| 2026-11-05 | OCR/Whisper return text for insertion instead of writing an automatic managed block | The user decides where the result belongs; background jobs that rewrite notes would conflict with autosave and external edits |
+| 2026-11-05 | Unused-attachment cleanup moves files to `.miaoyan/trash-assets/<timestamp>/`, not permanent deletion | Matches MiaoYan's use of the OS Trash and keeps the operation recoverable in a container without a host trash; the scan aborts if any note body cannot be read |
+| 2026-11-05 | Whole-vault export builds the zip in a temp file before streaming | ZipArchive writes its central directory synchronously, and Kestrel rejects synchronous response writes; a temp file also keeps memory bounded for large libraries |
+| 2026-11-05 | The UI language is a persisted client setting defaulting to Chinese, with English strings compiled into the bundle | Store users must get a usable default with no network; no server-side locale negotiation is needed for a single-user app |
+| 2026-11-05 | Smart typography is a command (format bar), not an always-on Markdown transform | It rewrites the source; only the writer can decide when a note should be normalised, matching MiaoYan's Format > Clean Typography |
+| 2026-11-05 | Raw HTML is enabled in markdown-it and sanitised by DOMPurify | MiaoYan supports raw `<video>`/`<details>`/responsive HTML; the `/img`, `/video` and `/fold` templates depend on it. Same-origin i/files sources are rewritten after sanitising |

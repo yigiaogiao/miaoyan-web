@@ -19,8 +19,8 @@
 | `MIAOYAN_LIBRARY` | 懒猫自动发现；否则 `./data/MiaoYan` | 固定书库根目录。懒猫上**不要设置**，否则所有用户会共用一本书库 |
 | `MIAOYAN_STATE_DIR` | `/lzcapp/var/miaoyan` 或 `./data/.miaoyan-state` | 索引、版本、缓存；可重建，但版本历史在重建后丢失 |
 | `MIAOYAN_DEFAULT_UID` | 空 | 多用户设备上，给不带 `X-HC-User-ID` 的 API-key 请求指定用户 |
-| `MIAOYAN_WEB_PASSWORD` | 空 | 独立部署的网页密码（认证计划在 M5；当前预留） |
-| `MIAOYAN_API_KEY` | 空 | Papyra-ingest 等机器调用的密钥；M4 接受 `X-API-Key` 但不校验，常量时间校验在 M5 完成 |
+| `MIAOYAN_WEB_PASSWORD` | 空 | 独立部署的网页密码；设置后 SPA 显示登录页，会话为 30 天 HMAC cookie。懒猫上保持为空，由网关登录 |
+| `MIAOYAN_API_KEY` | 空 | Papyra-ingest 等机器调用的密钥；设置后 `/api/*` 要求 `X-API-Key`，常量时间比较。同一 IP 5 分钟失败 8 次会限流 |
 | `MIAOYAN_MAX_UPLOAD_MB` | `100` | 单次上传上限，Kestrel 与 `MultipartReader` 共用 |
 | `MIAOYAN_PLANTUML_JAR` | `/opt/plantuml/plantuml.jar` | 镜像内已内置；设为空可禁用 |
 | `MIAOYAN_WHISPER_CMD` | 空 | 可选转写命令，如 `whisper --model small --output txt {input}` |
@@ -68,8 +68,9 @@ sudo chown -R 1000:1000 /srv/miaoyan
 - 上传：`client_max_body_size 200m;` 与 `MIAOYAN_MAX_UPLOAD_MB` 一致。
 - 不要把 `/healthz` 暴露为唯一的公网入口；健康检查不需要鉴权。
 
-在懒猫上不需要自己配反向代理，网关负责 TLS 与登录。若应用直接暴露在公网且未启用密码，
-任何人都能读写书库；M5 之前请只在可信网络使用。
+在懒猫上不需要自己配反向代理，网关负责 TLS 与登录。若应用直接暴露在公网，请至少设置
+`MIAOYAN_WEB_PASSWORD` 或 `MIAOYAN_API_KEY`；两者都为空时任何人都能读写书库，这只适合
+可信网络或已经由网关鉴权的懒猫环境。
 
 ## 懒猫微服
 
@@ -79,6 +80,11 @@ sudo chown -R 1000:1000 /srv/miaoyan
 - 用 `services` + 显式 `entrypoint`，`run_as: "1000:1000"`。
 - 书库自动定位到 `/lzcapp/documents/<uid>/MiaoYan`，状态到 `/lzcapp/var/miaoyan/<uid>`。
 - 镜像必须位于 `registry.lazycat.cloud` 才能过审。
+
+上架前必须在真实懒猫容器里完成一次手工验收（本仓库的开发机没有容器运行时）：
+安装 `.lpk`，确认 `document.private` 实际挂在 `/lzcapp/documents/<uid>`、不用密码即可从网关
+进入、导入书库后能编辑和上传附件，再升级一次镜像确认笔记仍在。`scripts/verify-lazycat.sh`
+只检查静态配置，不能替代这一步。
 
 ## 升级与回滚
 
