@@ -69,6 +69,49 @@ public static class VaultEndpoints
             return Results.Ok(note);
         });
 
+        api.MapGet("/links", (HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            return Results.Ok(service.GetLinkIndex(runtime));
+        });
+
+        api.MapGet("/search", (string? q, string? project, int? limit, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            return Results.Ok(service.SearchNotes(runtime, q, project, limit ?? 50));
+        });
+
+        api.MapGet("/notes/{id}/backlinks", (string id, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            return Results.Ok(service.GetBacklinks(runtime, id));
+        });
+
+        api.MapGet("/notes/{id}/versions", (string id, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            return Results.Ok(service.ListVersions(runtime, id));
+        });
+
+        api.MapGet("/notes/{id}/versions/{versionId}", (string id, string versionId, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            return Results.Ok(service.GetVersion(runtime, id, versionId));
+        });
+
+        api.MapPost("/notes/{id}/versions/{versionId}/restore", (string id, string versionId, RestoreVersionRequest? request, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            var result = service.RestoreVersion(runtime, id, versionId, request ?? new RestoreVersionRequest(null));
+            if (result.Conflict is not null)
+            {
+                return Results.Json(result.Conflict, statusCode: StatusCodes.Status412PreconditionFailed);
+            }
+
+            SetEtag(context, result.Note!.Etag);
+            return Results.Ok(result.Note);
+        });
+
         api.MapPut("/notes/{id}", async (string id, SaveNoteRequest? request, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service, CancellationToken cancellationToken) =>
         {
             var runtime = Resolve(context, vaults, watcher);
@@ -93,6 +136,13 @@ public static class VaultEndpoints
             var note = service.RenameNote(runtime, id, request ?? new RenameNoteRequest(null, null));
             SetEtag(context, note.Etag);
             return Results.Ok(note);
+        });
+
+        api.MapPost("/notes/{id}/duplicate", (string id, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            var note = service.DuplicateNote(runtime, id);
+            return Results.Created($"/api/notes/{note.Id}", note);
         });
 
         api.MapDelete("/notes/{id}", (string id, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>

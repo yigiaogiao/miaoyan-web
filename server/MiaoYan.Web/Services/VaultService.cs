@@ -24,6 +24,7 @@ public sealed partial class VaultService
     private const string RootProjectName = "未分类";
 
     private readonly VaultEventHub _hub;
+    private readonly NoteIndexService _index;
     private readonly ILogger<VaultService> _logger;
     private readonly ConcurrentDictionary<string, VaultCache> _caches = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.Ordinal);
@@ -51,9 +52,16 @@ public sealed partial class VaultService
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRegex();
 
-    public VaultService(VaultEventHub hub, ILogger<VaultService> logger)
+    [GeneratedRegex(@"`[^`\r\n]*`")]
+    private static partial Regex InlineCodeRegex();
+
+    [GeneratedRegex(@"\[\[([^\[\]\r\n]{1,200})\]\]")]
+    private static partial Regex WikiLinkRegex();
+
+    public VaultService(VaultEventHub hub, NoteIndexService index, ILogger<VaultService> logger)
     {
         _hub = hub;
+        _index = index;
         _logger = logger;
     }
 
@@ -94,6 +102,7 @@ public sealed partial class VaultService
     {
         var snapshot = Snapshot(runtime);
         IEnumerable<VaultNote> notes = snapshot.Notes;
+        var pinnedIds = _index.For(runtime).PinnedIds();
 
         if (!string.IsNullOrWhiteSpace(projectId) && projectId != AllProjectId)
         {
@@ -109,18 +118,169 @@ public sealed partial class VaultService
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(query))
+        if (!string.IsNullOrWhiteSpace(query) && query.Trim().Length > 0)
         {
-            var term = query.Trim();
-            notes = notes.Where(note =>
-                note.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
-                || note.Excerpt.Contains(term, StringComparison.OrdinalIgnoreCase));
+            var hits = SearchRecords(runtime, snapshot, query.Trim(), projectId, 500);
+            return hits
+                .Select(hit => snapshot.ById.TryGetValue(hit.Id, out var note)
+                    ? ToSummary(
+                        note,
+                        string.IsNullOrEmpty(hit.Snippet) ? note.Excerpt : hit.Snippet,
+                        pinnedIds.Contains(note.Id))
+                    : null)
+                .Where(summary => summary is not null)
+                .Select(summary => summary!)
+                .ToList();
         }
 
         return notes
-            .OrderByDescending(note => note.ModifiedAt)
-            .Select(ToSummary)
+            .OrderByDescending(note => pinnedIds.Contains(note.Id))
+            .ThenByDescending(note => note.ModifiedAt)
+            .Select(note => ToSummary(note, note.Excerpt, pinnedIds.Contains(note.Id)))
             .ToList();
+    }
+
+    public IReadOnlyList<SearchHitDto> SearchNotes(
+        VaultRuntime runtime,
+        string? query,
+        string? projectId,
+        int limit = 50)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        var snapshot = Snapshot(runtime);
+        var hits = SearchRecords(runtime, snapshot, query.Trim(), projectId, limit);
+        return hits
+            .Select(hit => snapshot.ById.TryGetValue(hit.Id, out var note)
+                ? new SearchHitDto(
+                    note.Id,
+                    note.Title,
+                    note.ProjectId,
+                    note.ProjectName,
+                    string.IsNullOrEmpty(hit.Snippet) ? note.Excerpt : hit.Snippet,
+                    note.ModifiedAt,
+                    note.Size,
+                    note.IsUntitled)
+                : null)
+            .Where(hit => hit is not null)
+            .Select(hit => hit!)
+            .ToList();
+    }
+
+    private IReadOnlyList<SearchHit> SearchRecords(
+        VaultRuntime runtime,
+        VaultSnapshot snapshot,
+        string query,
+        string? projectId,
+        int limit)
+    {
+        string? projectPath;
+        if (string.IsNullOrWhiteSpace(projectId) || projectId == AllProjectId)
+        {
+            projectPath = null;
+        }
+        else if (projectId == RootProjectId)
+        {
+            projectPath = string.Empty;
+        }
+        else
+        {
+            projectPath = FindProjectPath(snapshot, projectId)
+                ?? throw new ApiException(StatusCodes.Status404NotFound, "project-not-found", "Project not found.");
+        }
+
+        var indexed = snapshot.Notes
+            .Select(note => new IndexedNote(
+                note.Id,
+                note.RelPath,
+                note.Title,
+                note.ProjectPath,
+                note.ProjectName,
+                note.ModifiedAt.UtcTicks,
+                note.Size,
+                note.FullPath))
+            .ToList();
+
+        return _index.For(runtime).RefreshAndSearch(indexed, query, projectPath, limit);
+    }
+
+    /// <summary>
+    /// Title index plus unresolved references, consumed by the preview to style
+    /// [[links]] and by the "create note" action. Exact titles win; matching is
+    /// case-insensitive only as a fallback, like MiaoYan's link index.
+    /// </summary>
+    public LinkIndexDto GetLinkIndex(VaultRuntime runtime)
+    {
+        var snapshot = Snapshot(runtime);
+        var targets = snapshot.Notes
+            .GroupBy(note => note.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderBy(note => note.RelPath, StringComparer.Ordinal).First())
+            .OrderBy(note => note.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(note => new LinkTargetDto(note.Title, note.Id, note.ProjectName, note.RelPath))
+            .ToList();
+
+        var known = targets.Select(target => target.Title).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unresolved = new Dictionary<string, (string Title, int Count)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var note in snapshot.Notes)
+        {
+            var content = TryReadText(note.FullPath);
+            if (content is null)
+            {
+                continue;
+            }
+
+            foreach (var link in ExtractWikiLinks(content))
+            {
+                if (known.Contains(link.Title))
+                {
+                    continue;
+                }
+
+                unresolved[link.Title] = unresolved.TryGetValue(link.Title, out var current)
+                    ? (current.Title, current.Count + 1)
+                    : (link.Title, 1);
+            }
+        }
+
+        return new LinkIndexDto(
+            targets,
+            unresolved.Values
+                .OrderByDescending(item => item.Count)
+                .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                .Select(item => new UnresolvedLinkDto(item.Title, item.Count))
+                .ToList());
+    }
+
+    public IReadOnlyList<BacklinkDto> GetBacklinks(VaultRuntime runtime, string id)
+    {
+        var snapshot = Snapshot(runtime);
+        var target = RequireNote(runtime, id);
+        var results = new List<BacklinkDto>();
+        foreach (var note in snapshot.Notes)
+        {
+            if (note.Id == target.Id)
+            {
+                continue;
+            }
+
+            var content = TryReadText(note.FullPath);
+            if (content is null)
+            {
+                continue;
+            }
+
+            var hit = ExtractWikiLinks(content)
+                .FirstOrDefault(link => string.Equals(link.Title, target.Title, StringComparison.OrdinalIgnoreCase));
+            if (hit is not null)
+            {
+                results.Add(new BacklinkDto(note.Id, note.Title, note.ProjectName, hit.Line, hit.Excerpt));
+            }
+        }
+
+        return results.OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     public NoteDto GetNote(VaultRuntime runtime, string id)
@@ -129,7 +289,7 @@ public sealed partial class VaultService
         try
         {
             var bytes = File.ReadAllBytes(note.FullPath);
-            return ToNote(note, bytes);
+            return ToNote(runtime, note, bytes);
         }
         catch (FileNotFoundException)
         {
@@ -175,7 +335,7 @@ public sealed partial class VaultService
         Invalidate(runtime.Key);
         var note = RequireNote(runtime, NoteIdFor(relative));
         _hub.Publish(runtime.Key, new VaultChange("created", note.Id, relative, DateTimeOffset.UtcNow));
-        return ToNote(note, File.ReadAllBytes(fullPath));
+        return ToNote(runtime, note, File.ReadAllBytes(fullPath));
     }
 
     public async Task<SaveResult> SaveNoteAsync(VaultRuntime runtime, string id, SaveNoteRequest request, CancellationToken cancellationToken)
@@ -217,15 +377,116 @@ public sealed partial class VaultService
                     Decode(currentBytes).Content));
             }
 
+            // Keep the pre-edit text as a version too, so the very first save
+            // can still be undone back to the note's original content.
+            SnapshotVersion(runtime, note, currentBytes);
+
             var hasBom = HasBom(currentBytes);
             var bytes = new UTF8Encoding(hasBom).GetBytes(request.Content);
             await WriteAtomicAsync(note.FullPath, bytes, cancellationToken);
+            SnapshotVersion(runtime, note, bytes);
             _hub.Suppress(runtime.Key, note.FullPath);
             Invalidate(runtime.Key);
 
             var fresh = RequireNote(runtime, NoteIdFor(note.RelPath));
             _hub.Publish(runtime.Key, new VaultChange("saved", fresh.Id, fresh.RelPath, DateTimeOffset.UtcNow));
-            return new SaveResult(ToNote(fresh, bytes), null);
+            return new SaveResult(ToNote(runtime, fresh, bytes), null);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public IReadOnlyList<VersionDto> ListVersions(VaultRuntime runtime, string id)
+    {
+        var note = RequireNote(runtime, id);
+        var directory = VersionDirectory(runtime, note.Id);
+        if (!Directory.Exists(directory))
+        {
+            return [];
+        }
+
+        var currentEtag = ComputeEtag(File.ReadAllBytes(note.FullPath));
+        return Directory.EnumerateFiles(directory, "*.md")
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(info => info.Name, StringComparer.Ordinal)
+            .Select(info =>
+            {
+                var versionId = Path.GetFileNameWithoutExtension(info.Name);
+                var etag = VersionEtag(versionId);
+                return new VersionDto(
+                    versionId,
+                    VersionCreatedAt(versionId, info),
+                    info.Length,
+                    etag,
+                    etag.Length > 0 && currentEtag.StartsWith(etag, StringComparison.OrdinalIgnoreCase));
+            })
+            .ToList();
+    }
+
+    public VersionDetailDto GetVersion(VaultRuntime runtime, string id, string versionId)
+    {
+        var note = RequireNote(runtime, id);
+        var path = VersionPath(runtime, note.Id, versionId);
+        if (!File.Exists(path))
+        {
+            throw new ApiException(StatusCodes.Status404NotFound, "version-not-found", "Version not found.");
+        }
+
+        var bytes = File.ReadAllBytes(path);
+        return new VersionDetailDto(
+            versionId,
+            Decode(bytes).Content,
+            VersionCreatedAt(versionId, new FileInfo(path)),
+            bytes.Length,
+            ComputeEtag(bytes));
+    }
+
+    public SaveResult RestoreVersion(
+        VaultRuntime runtime,
+        string id,
+        string versionId,
+        RestoreVersionRequest request)
+    {
+        var note = RequireNote(runtime, id);
+        var gate = LockFor(note.FullPath);
+        gate.Wait();
+        try
+        {
+            note = RequireNote(runtime, id);
+            var versionPath = VersionPath(runtime, note.Id, versionId);
+            if (!File.Exists(versionPath))
+            {
+                throw new ApiException(StatusCodes.Status404NotFound, "version-not-found", "Version not found.");
+            }
+
+            var currentBytes = File.ReadAllBytes(note.FullPath);
+            var currentEtag = ComputeEtag(currentBytes);
+            if (!string.IsNullOrWhiteSpace(request.Etag)
+                && !string.Equals(request.Etag, currentEtag, StringComparison.OrdinalIgnoreCase))
+            {
+                var currentContent = Decode(currentBytes).Content;
+                var conflictPath = WriteConflictCopy(runtime, note, currentContent);
+                return new SaveResult(null, new ConflictDto(
+                    "conflict",
+                    "The note changed on disk before the version could be restored.",
+                    currentEtag,
+                    conflictPath,
+                    currentContent));
+            }
+
+            var versionBytes = File.ReadAllBytes(versionPath);
+            var hasBom = HasBom(currentBytes);
+            var bytes = new UTF8Encoding(hasBom).GetBytes(Decode(versionBytes).Content);
+            WriteAtomicAsync(note.FullPath, bytes, CancellationToken.None).GetAwaiter().GetResult();
+            SnapshotVersion(runtime, note, currentBytes);
+            _hub.Suppress(runtime.Key, note.FullPath);
+            Invalidate(runtime.Key);
+
+            var fresh = RequireNote(runtime, NoteIdFor(note.RelPath));
+            _hub.Publish(runtime.Key, new VaultChange("restored", fresh.Id, fresh.RelPath, DateTimeOffset.UtcNow));
+            return new SaveResult(ToNote(runtime, fresh, bytes), null);
         }
         finally
         {
@@ -241,6 +502,7 @@ public sealed partial class VaultService
         try
         {
             note = RequireNote(runtime, id);
+            var wasPinned = _index.For(runtime).PinnedIds().Contains(note.Id);
             var snapshot = Snapshot(runtime);
             var currentDirectory = Path.GetDirectoryName(note.FullPath)!;
             var targetProjectPath = request.ProjectId is null
@@ -291,8 +553,63 @@ public sealed partial class VaultService
             Invalidate(runtime.Key);
             var relative = VaultPath.Relative(runtime.Paths.VaultRoot, targetPath);
             var fresh = RequireNote(runtime, NoteIdFor(relative));
+            MoveVersions(runtime, note.Id, fresh.Id);
+            if (request.Pinned is { } pinned)
+            {
+                _index.For(runtime).SetPinned(fresh.Id, pinned);
+                if (fresh.Id != note.Id)
+                {
+                    _index.For(runtime).SetPinned(note.Id, false);
+                }
+            }
+            else if (wasPinned && fresh.Id != note.Id)
+            {
+                _index.For(runtime).MovePin(note.Id, fresh.Id);
+            }
+
             _hub.Publish(runtime.Key, new VaultChange("renamed", fresh.Id, relative, DateTimeOffset.UtcNow));
-            return ToNote(fresh, File.ReadAllBytes(targetPath));
+            return ToNote(runtime, fresh, File.ReadAllBytes(targetPath));
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public NoteDto DuplicateNote(VaultRuntime runtime, string id)
+    {
+        var note = RequireNote(runtime, id);
+        var gate = LockFor(note.FullPath);
+        gate.Wait();
+        try
+        {
+            note = RequireNote(runtime, id);
+            var directory = Path.GetDirectoryName(note.FullPath)!;
+            var sourceStem = TitleHelper.ToFileStem(note.Title);
+            if (sourceStem.Length == 0)
+            {
+                sourceStem = "Untitled Note";
+            }
+
+            var stem = sourceStem + " Copy";
+            var index = 2;
+            while (File.Exists(Path.Combine(directory, stem + ".md")))
+            {
+                stem = $"{sourceStem} Copy {index++}";
+            }
+
+            var targetPath = Path.Combine(directory, stem + ".md");
+            var sourceBytes = File.ReadAllBytes(note.FullPath);
+            using (var stream = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(sourceBytes);
+            }
+
+            var relative = VaultPath.Relative(runtime.Paths.VaultRoot, targetPath);
+            Invalidate(runtime.Key);
+            var fresh = RequireNote(runtime, NoteIdFor(relative));
+            _hub.Publish(runtime.Key, new VaultChange("created", fresh.Id, relative, DateTimeOffset.UtcNow));
+            return ToNote(runtime, fresh, sourceBytes);
         }
         finally
         {
@@ -586,6 +903,158 @@ public sealed partial class VaultService
     public string ComputeEtag(byte[] bytes)
         => Convert.ToHexString(SHA256.HashData(bytes))[..32].ToLowerInvariant();
 
+    /// <summary>
+    /// Writes a snapshot of the saved content. Duplicate saves of the same
+    /// bytes are ignored. History is capped at 50 files or 30 days, mirroring
+    /// MiaoYan's per-note version budget.
+    /// </summary>
+    private void SnapshotVersion(VaultRuntime runtime, VaultNote note, byte[] bytes)
+    {
+        try
+        {
+            var directory = VersionDirectory(runtime, note.Id);
+            Directory.CreateDirectory(directory);
+            var etag = ComputeEtag(bytes);
+            var newest = Directory.EnumerateFiles(directory, "*.md")
+                .OrderByDescending(path => Path.GetFileName(path), StringComparer.Ordinal)
+                .FirstOrDefault();
+            var newestEtag = newest is null ? string.Empty : VersionEtag(Path.GetFileNameWithoutExtension(newest));
+            if (newestEtag.Length > 0 && etag.StartsWith(newestEtag, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            // Ticks keep two saves in the same millisecond ordered; the etag
+            // suffix makes the filename idempotent for identical saves.
+            var id = $"{DateTime.UtcNow.Ticks:D18}-{etag[..8]}";
+            var path = Path.Combine(directory, id + ".md");
+            if (!File.Exists(path))
+            {
+                File.WriteAllBytes(path, bytes);
+            }
+
+            var cutoff = DateTime.UtcNow.AddDays(-30);
+            var files = Directory.EnumerateFiles(directory, "*.md")
+                .Select(file => new FileInfo(file))
+                .OrderByDescending(info => info.Name, StringComparer.Ordinal)
+                .ToList();
+            for (var index = 0; index < files.Count; index++)
+            {
+                if (index >= 50 || files[index].LastWriteTimeUtc < cutoff)
+                {
+                    try
+                    {
+                        files[index].Delete();
+                    }
+                    catch (IOException)
+                    {
+                        // A concurrent restore may still hold the file.
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Could not snapshot a version for {Note}", note.RelPath);
+        }
+    }
+
+    private static string VersionDirectory(VaultRuntime runtime, string noteId)
+    {
+        if (noteId.Length == 0 || noteId.Length > 64 || noteId.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-'))
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "invalid-version", "Invalid note identifier.");
+        }
+
+        return Path.Combine(runtime.Paths.VersionsRoot, noteId);
+    }
+
+    private static string VersionPath(VaultRuntime runtime, string noteId, string versionId)
+    {
+        if (!IsSafeVersionId(versionId))
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "invalid-version", "Invalid version identifier.");
+        }
+
+        return Path.Combine(VersionDirectory(runtime, noteId), versionId + ".md");
+    }
+
+    private static bool IsSafeVersionId(string versionId)
+        => versionId.Length is > 0 and <= 64
+            && versionId.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+
+    private static string VersionEtag(string versionId)
+    {
+        var separator = versionId.IndexOf('-');
+        return separator >= 0 && separator < versionId.Length - 1
+            ? versionId[(separator + 1)..]
+            : string.Empty;
+    }
+
+    private static DateTimeOffset VersionCreatedAt(string versionId, FileInfo info)
+    {
+        var separator = versionId.IndexOf('-');
+        var stamp = separator > 0 ? versionId[..separator] : versionId;
+        if (stamp.Length == 18 && long.TryParse(stamp, out var ticks))
+        {
+            try
+            {
+                return new DateTimeOffset(ticks, TimeSpan.Zero);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Fall through to the file timestamp.
+            }
+        }
+
+        if (stamp.Length == 17
+            && DateTimeOffset.TryParseExact(
+                stamp,
+                "yyyyMMddHHmmssfff",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal,
+                out var parsed))
+        {
+            return parsed;
+        }
+
+        return new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero);
+    }
+
+    private static void MoveVersions(VaultRuntime runtime, string oldNoteId, string newNoteId)
+    {
+        if (oldNoteId == newNoteId)
+        {
+            return;
+        }
+
+        var source = Path.Combine(runtime.Paths.VersionsRoot, oldNoteId);
+        if (!Directory.Exists(source))
+        {
+            return;
+        }
+
+        var destination = Path.Combine(runtime.Paths.VersionsRoot, newNoteId);
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.EnumerateFiles(source, "*.md"))
+        {
+            var target = Path.Combine(destination, Path.GetFileName(file));
+            if (!File.Exists(target))
+            {
+                File.Move(file, target);
+            }
+        }
+
+        try
+        {
+            Directory.Delete(source, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Leave the empty directory for a later cleanup.
+        }
+    }
+
     private string WriteConflictCopy(VaultRuntime runtime, VaultNote note, string content)
     {
         var stem = Path.GetFileNameWithoutExtension(note.FullPath);
@@ -839,6 +1308,89 @@ public sealed partial class VaultService
             && !segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Extracts MiaoYan wikilinks from prose. Fenced code, inline code and YAML
+    /// frontmatter are ignored, and line numbers are 1-based for the UI.
+    /// </summary>
+    private static IEnumerable<WikiLinkHit> ExtractWikiLinks(string content)
+    {
+        var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        var start = 0;
+        if (lines.Length > 1 && lines[0].Trim() == "---")
+        {
+            for (var index = 1; index < Math.Min(lines.Length, 200); index++)
+            {
+                if (lines[index].Trim() == "---")
+                {
+                    start = index + 1;
+                    break;
+                }
+            }
+        }
+
+        char? fence = null;
+        for (var index = start; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal))
+            {
+                var marker = trimmed[0];
+                if (fence is null)
+                {
+                    fence = marker;
+                }
+                else if (fence == marker)
+                {
+                    fence = null;
+                }
+
+                continue;
+            }
+
+            if (fence is not null)
+            {
+                continue;
+            }
+
+            var masked = InlineCodeRegex().Replace(line, match => new string(' ', match.Length));
+            foreach (Match match in WikiLinkRegex().Matches(masked))
+            {
+                var title = match.Groups[1].Value.Trim();
+                if (title.Length == 0)
+                {
+                    continue;
+                }
+
+                var excerpt = WhitespaceRegex().Replace(line.Trim(), " ");
+                if (excerpt.Length > 160)
+                {
+                    excerpt = excerpt[..160] + "…";
+                }
+
+                yield return new WikiLinkHit(title, index + 1, excerpt);
+            }
+        }
+    }
+
+    private static string? TryReadText(string fullPath)
+    {
+        try
+        {
+            using var stream = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            return reader.ReadToEnd();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private static string ReadExcerpt(string fullPath)
     {
         try
@@ -876,7 +1428,7 @@ public sealed partial class VaultService
     private static bool HasBom(byte[] bytes)
         => bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
 
-    private NoteSummaryDto ToSummary(VaultNote note)
+    private static NoteSummaryDto ToSummary(VaultNote note, string excerpt, bool pinned)
         => new(
             note.Id,
             note.Title,
@@ -884,13 +1436,14 @@ public sealed partial class VaultService
             note.ProjectId,
             note.ProjectName,
             note.Folder,
-            note.Excerpt,
+            excerpt,
             note.ModifiedAt,
             note.CreatedAt,
             note.Size,
-            note.IsUntitled);
+            note.IsUntitled,
+            pinned);
 
-    private NoteDto ToNote(VaultNote note, byte[] bytes)
+    private NoteDto ToNote(VaultRuntime runtime, VaultNote note, byte[] bytes)
     {
         var decoded = Decode(bytes);
         return new NoteDto(
@@ -906,6 +1459,7 @@ public sealed partial class VaultService
             note.CreatedAt,
             bytes.Length,
             note.IsUntitled,
+            _index.For(runtime).PinnedIds().Contains(note.Id),
             decoded.HasBom);
     }
 
@@ -938,6 +1492,8 @@ public sealed partial class VaultService
         long Size,
         string Excerpt,
         bool IsUntitled);
+
+    private sealed record WikiLinkHit(string Title, int Line, string Excerpt);
 
     private sealed record TrashMeta(
         string Kind,

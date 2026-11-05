@@ -19,12 +19,14 @@ if (maxUploadMb > 0)
 
 options.WebPassword ??= Environment.GetEnvironmentVariable("MIAOYAN_WEB_PASSWORD");
 options.ApiKey ??= Environment.GetEnvironmentVariable("MIAOYAN_API_KEY");
+options.DocumentsRoot ??= Environment.GetEnvironmentVariable("MIAOYAN_DOCUMENTS_ROOT");
 options.DefaultUid ??= Environment.GetEnvironmentVariable("MIAOYAN_DEFAULT_UID");
 options.PlantUmlJar ??= Environment.GetEnvironmentVariable("MIAOYAN_PLANTUML_JAR");
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<VaultRegistry>();
 builder.Services.AddSingleton<VaultEventHub>();
+builder.Services.AddSingleton<NoteIndexService>();
 builder.Services.AddSingleton<VaultService>();
 builder.Services.AddSingleton<VaultWatcher>();
 builder.Services.AddSingleton<CapabilitiesService>();

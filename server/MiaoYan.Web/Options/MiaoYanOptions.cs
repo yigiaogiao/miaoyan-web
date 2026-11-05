@@ -33,6 +33,11 @@ public sealed class MiaoYanOptions
 {
     public string? Library { get; set; }
     public string? StateDir { get; set; }
+    /// <summary>
+    /// Overrides the per-user documents root. Defaults to /lzcapp/documents on
+    /// LazyCat; useful for self-hosting several users and for tests.
+    /// </summary>
+    public string? DocumentsRoot { get; set; }
     public string? DefaultUid { get; set; }
     public string? WebPassword { get; set; }
     public string? ApiKey { get; set; }

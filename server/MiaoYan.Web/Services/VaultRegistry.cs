@@ -37,6 +37,7 @@ public sealed class VaultRegistry
     private readonly string? _explicitLibrary;
     private readonly string? _explicitState;
     private readonly string? _documentsRoot;
+    private readonly bool _documentsConfigured;
     private readonly string _stateBase;
     private readonly string _developmentRoot;
 
@@ -57,19 +58,32 @@ public sealed class VaultRegistry
 
         _developmentRoot = Path.Combine(environment.ContentRootPath, "data");
 
-        // /lzcapp exists on a LazyCat host too, so use the package content
-        // mount as the container marker. If we are in an app container but
-        // document.private was not granted, writing to the container rootfs
-        // would silently lose notes; fail fast instead.
+        // Official mount: document.private exposes /lzcapp/documents/<uid>
+        // (LazyCat v1.5+, gateway injects the signed X-HC-User-ID header).
+        // MIAOYAN_DOCUMENTS_ROOT allows the same layout off LazyCat and in
+        // tests. /lzcapp exists on a LazyCat host too, so use the package
+        // content mount as the container marker. If we are in an app container
+        // but document.private was not granted, writing to the container
+        // rootfs would silently lose notes; fail fast instead.
+        var configuredDocuments = NormalisePath(_options.DocumentsRoot);
         var inAppContainer = Directory.Exists("/lzcapp/pkg");
-        if (inAppContainer && !Directory.Exists("/lzcapp/documents") && _explicitLibrary is null)
+        if (inAppContainer
+            && configuredDocuments is null
+            && !Directory.Exists("/lzcapp/documents")
+            && _explicitLibrary is null)
         {
             throw new InvalidOperationException(
                 "LazyCat app container has no /lzcapp/documents mount. " +
                 "Declare the document.private permission in package.yml and reinstall the app.");
         }
 
-        _documentsRoot = Directory.Exists("/lzcapp/documents") ? "/lzcapp/documents" : null;
+        _documentsConfigured = configuredDocuments is not null;
+        _documentsRoot = configuredDocuments
+            ?? (Directory.Exists("/lzcapp/documents") ? "/lzcapp/documents" : null);
+        if (_documentsRoot is not null)
+        {
+            Directory.CreateDirectory(_documentsRoot);
+        }
 
         var lazyCatVar = Directory.Exists("/lzcapp/var") ? "/lzcapp/var/miaoyan" : null;
         _stateBase = _explicitState
@@ -90,7 +104,7 @@ public sealed class VaultRegistry
     public string Mode => _explicitLibrary is not null
         ? "explicit"
         : _documentsRoot is not null
-            ? "lazycat"
+            ? (_documentsConfigured ? "documents" : "lazycat")
             : "development";
 
     public string StateBase => _stateBase;
