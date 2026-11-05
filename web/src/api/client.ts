@@ -3,6 +3,7 @@ import type {
   AuthStatus,
   Backlink,
   ChangeEvent,
+  CleanUnusedAssetsResult,
   ConflictInfo,
   LinkIndex,
   Note,
@@ -15,6 +16,7 @@ import type {
   SearchHit,
   TrashEntry,
   TrashRestoreResult,
+  UnusedAssets,
   VaultInfo,
 } from './types';
 import { t } from '../lib/i18n';
@@ -168,6 +170,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path }),
     }),
+
+  unusedAssets: () => request<UnusedAssets>('/api/maintenance/unused-assets'),
+  cleanUnusedAssets: () =>
+    request<CleanUnusedAssetsResult>('/api/maintenance/unused-assets/clean', { method: 'POST' }),
 
   trash: () => request<TrashEntry[]>('/api/trash'),
   restoreTrash: (id: string) =>

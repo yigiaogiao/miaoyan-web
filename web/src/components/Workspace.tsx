@@ -8,7 +8,7 @@ import { isMod } from '../lib/utils';
 import { useToastStore } from '../store/toast';
 import { useUiStore } from '../store/ui';
 import { CommandPalette } from './CommandPalette';
-import { PromptDialog } from './Dialogs';
+import { ConfirmDialog, PromptDialog } from './Dialogs';
 import { EditorPane } from './EditorPane';
 import { EmptyState } from './EmptyState';
 import { NoteList } from './NoteList';
@@ -45,6 +45,7 @@ export function Workspace() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [renamingNote, setRenamingNote] = useState<Note | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
+  const [unusedCount, setUnusedCount] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [isNarrow, setIsNarrow] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 860px)').matches,
@@ -227,6 +228,35 @@ export function Workspace() {
     toast(t('workspace.trashed'), 'success');
   }
 
+  async function scanUnusedAssets() {
+    try {
+      const result = await api.unusedAssets();
+      if (result.files.length === 0) {
+        toast(t('workspace.noUnusedAssets'), 'info');
+        return;
+      }
+      setUnusedCount(result.files.length);
+    } catch (reason) {
+      toast(reason instanceof Error ? reason.message : t('workspace.scanFailed'), 'error');
+    }
+  }
+
+  async function cleanUnusedAssets() {
+    const result = await api.cleanUnusedAssets();
+    setUnusedCount(null);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['notes'] }),
+      queryClient.invalidateQueries({ queryKey: ['projects'] }),
+      queryClient.invalidateQueries({ queryKey: ['note'] }),
+    ]);
+    if (result.removed.length > 0) {
+      toast(t('workspace.assetsCleaned', { count: result.removed.length }), 'success');
+    }
+    if (result.failed.length > 0) {
+      toast(t('workspace.assetsCleanFailed', { count: result.failed.length }), 'error');
+    }
+  }
+
   async function createProject(name: string) {
     const project = await api.createProject(name);
     await queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -384,6 +414,7 @@ export function Workspace() {
             onRename={renameProject}
             onDelete={deleteProject}
             onOpenTrash={() => setTrashOpen(true)}
+            onCleanUnused={() => void scanUnusedAssets()}
             onMoveNote={(id, projectId) => void moveNote(id, projectId)}
           />
         </div>
@@ -468,6 +499,15 @@ export function Workspace() {
       />
 
       <TrashDialog open={trashOpen} onOpenChange={setTrashOpen} onRestored={onRestored} />
+
+      <ConfirmDialog
+        open={unusedCount !== null}
+        title={t('workspace.cleanUnusedTitle')}
+        description={t('workspace.cleanUnusedDescription', { count: unusedCount ?? 0 })}
+        confirmText={t('workspace.cleanUnusedConfirm')}
+        onOpenChange={(open) => !open && setUnusedCount(null)}
+        onConfirm={cleanUnusedAssets}
+      />
 
       <CommandPalette
         open={paletteOpen}

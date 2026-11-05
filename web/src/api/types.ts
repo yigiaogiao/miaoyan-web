@@ -72,6 +72,16 @@ export interface MediaToolResult {
   text: string;
 }
 
+export interface UnusedAssets {
+  scannedNotes: number;
+  files: string[];
+}
+
+export interface CleanUnusedAssetsResult {
+  removed: string[];
+  failed: string[];
+}
+
 export interface LinkTarget {
   title: string;
   noteId: string;

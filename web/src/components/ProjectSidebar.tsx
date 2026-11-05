@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Feather, FolderPlus, Layers, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Download, Eraser, Feather, FolderPlus, Layers, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import type { Project } from '../api/types';
 import { useI18n } from '../lib/i18n';
@@ -14,6 +14,7 @@ interface Props {
   onDelete: (project: Project) => Promise<void>;
   onCreate: (name: string) => Promise<void>;
   onOpenTrash: () => void;
+  onCleanUnused: () => void;
   onMoveNote: (noteId: string, projectId: string) => void;
 }
 
@@ -95,6 +96,7 @@ export function ProjectSidebar({
   onDelete,
   onCreate,
   onOpenTrash,
+  onCleanUnused,
   onMoveNote,
 }: Props) {
   const { t } = useI18n();
@@ -213,7 +215,22 @@ export function ProjectSidebar({
         )}
       </nav>
 
-      <div className="border-t border-[var(--border)] p-2">
+      <div className="space-y-0.5 border-t border-[var(--border)] p-2">
+        <a
+          href="/api/export/vault"
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
+        >
+          <Download size={14} className="text-[var(--text-faint)]" />
+          {t('sidebar.exportVault')}
+        </a>
+        <button
+          type="button"
+          onClick={onCleanUnused}
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
+        >
+          <Eraser size={14} className="text-[var(--text-faint)]" />
+          {t('sidebar.cleanUnused')}
+        </button>
         <button
           type="button"
           onClick={onOpenTrash}
