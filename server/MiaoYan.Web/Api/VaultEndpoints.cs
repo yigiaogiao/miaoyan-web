@@ -47,10 +47,13 @@ public static class VaultEndpoints
             return Results.NoContent();
         });
 
-        api.MapGet("/notes", (string? project, string? q, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        api.MapGet("/notes", (string? project, string? q, string? summary, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
         {
             var runtime = Resolve(context, vaults, watcher);
-            return Results.Ok(service.ListNotes(runtime, project, q));
+            var summariesOnly = summary is "1" or "true";
+            return Results.Ok(summariesOnly
+                ? service.ListNotes(runtime, project, q)
+                : service.ListPapyraNotes(runtime, project, q));
         });
 
         api.MapPost("/notes", (CreateNoteRequest? request, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
@@ -120,9 +123,17 @@ public static class VaultEndpoints
                 throw new ApiException(StatusCodes.Status400BadRequest, "body-required", "A JSON body is required.");
             }
 
-            var result = await service.SaveNoteAsync(runtime, id, request, cancellationToken);
+            var result = request.Body is not null
+                ? await service.SavePapyraNoteAsync(
+                    runtime,
+                    id,
+                    request,
+                    NormaliseIfMatch(context.Request.Headers.IfMatch.FirstOrDefault()),
+                    cancellationToken)
+                : await service.SaveNoteAsync(runtime, id, request, cancellationToken);
             if (result.Conflict is not null)
             {
+                SetEtag(context, result.Conflict.CurrentEtag);
                 return Results.Json(result.Conflict, statusCode: StatusCodes.Status412PreconditionFailed);
             }
 
@@ -186,6 +197,71 @@ public static class VaultEndpoints
             return Results.File(asset.FullPath, contentType, enableRangeProcessing: true);
         });
 
+        api.MapPost("/media/upload", async (HttpContext context, VaultRegistry vaults, MediaLibrary media, MiaoYanOptions options, CancellationToken cancellationToken) =>
+        {
+            var runtime = vaults.Resolve(context);
+            if (!context.Request.HasFormContentType)
+            {
+                throw new ApiException(StatusCodes.Status400BadRequest, "multipart-required", "Upload must be multipart/form-data.");
+            }
+
+            var form = await context.Request.ReadFormAsync(cancellationToken);
+            var file = form.Files.GetFile("file")
+                ?? form.Files.FirstOrDefault()
+                ?? throw new ApiException(StatusCodes.Status400BadRequest, "file-required", "The form field 'file' is required.");
+            var asset = await media.SaveAsync(runtime, file, options.MaxUploadBytes, cancellationToken);
+            return Results.Ok(asset);
+        });
+
+        api.MapMethods("/media/{filename}", [HttpMethods.Get, HttpMethods.Head], (
+            string filename,
+            HttpContext context,
+            VaultRegistry vaults,
+            MediaLibrary media) =>
+        {
+            var runtime = vaults.Resolve(context);
+            var asset = media.Resolve(runtime, filename)
+                ?? throw new ApiException(StatusCodes.Status404NotFound, "media-not-found", "Media not found.");
+            var info = new FileInfo(asset.FullPath);
+            context.Response.Headers.CacheControl = "private, max-age=3600";
+            context.Response.Headers.ETag = $"\"{info.Length:x}-{info.LastWriteTimeUtc.Ticks:x}\"";
+            context.Response.Headers["Content-Security-Policy"] = "sandbox";
+            context.Response.Headers.ContentDisposition =
+                $"inline; filename*=UTF-8''{Uri.EscapeDataString(asset.FileName)}";
+
+            var contentType = MediaLibrary.ContentTypeFor(asset.FileName);
+            if (HttpMethods.IsHead(context.Request.Method))
+            {
+                context.Response.ContentType = contentType;
+                context.Response.ContentLength = info.Length;
+                return Results.Empty;
+            }
+
+            return Results.File(asset.FullPath, contentType, enableRangeProcessing: true);
+        });
+
+        api.MapGet("/categories", (HttpContext context, VaultRegistry vaults, VaultService service, CategoryStore categories) =>
+        {
+            var runtime = vaults.Resolve(context);
+            return Results.Ok(categories.List(runtime, CountTags(service, runtime)));
+        });
+
+        api.MapPost("/categories", (PapyraCategoryRequest? request, HttpContext context, VaultRegistry vaults, VaultService service, CategoryStore categories) =>
+        {
+            var runtime = vaults.Resolve(context);
+            var name = (request?.Name ?? string.Empty).Trim();
+            var counts = CountTags(service, runtime);
+            var count = counts.GetValueOrDefault(name);
+            return Results.Ok(categories.Save(runtime, request ?? new PapyraCategoryRequest(null, null), count));
+        });
+
+        api.MapDelete("/categories/{name}", (string name, HttpContext context, VaultRegistry vaults, CategoryStore categories) =>
+        {
+            var runtime = vaults.Resolve(context);
+            categories.Delete(runtime, name);
+            return Results.NoContent();
+        });
+
         api.MapGet("/trash", (HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
         {
             var runtime = Resolve(context, vaults, watcher);
@@ -215,6 +291,36 @@ public static class VaultEndpoints
 
     private static void SetEtag(HttpContext context, string etag)
         => context.Response.Headers.ETag = new EntityTagHeaderValue($"\"{etag}\"").ToString();
+
+    private static string? NormaliseIfMatch(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var text = value.Trim();
+        if (text.StartsWith("W/", StringComparison.OrdinalIgnoreCase))
+        {
+            text = text[2..].Trim();
+        }
+
+        return text.Trim('"');
+    }
+
+    private static Dictionary<string, int> CountTags(VaultService service, VaultRuntime runtime)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var note in service.ListPapyraNotes(runtime, null, null))
+        {
+            foreach (var tag in note.Tags ?? [])
+            {
+                counts[tag] = counts.GetValueOrDefault(tag) + 1;
+            }
+        }
+
+        return counts;
+    }
 
     private static async Task EventsAsync(
         HttpContext context,

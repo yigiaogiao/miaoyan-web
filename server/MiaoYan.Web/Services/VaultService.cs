@@ -140,6 +140,40 @@ public sealed partial class VaultService
             .ToList();
     }
 
+    /// <summary>
+    /// Papyra's list endpoint returns full bodies. Keeping this separate from
+    /// the native summary keeps the SPA responsive on a large library.
+    /// </summary>
+    public IReadOnlyList<NoteSummaryDto> ListPapyraNotes(VaultRuntime runtime, string? projectId, string? query)
+    {
+        var summaries = ListNotes(runtime, projectId, query);
+        var root = runtime.Paths.VaultRoot;
+        var result = new List<NoteSummaryDto>(summaries.Count);
+        foreach (var summary in summaries)
+        {
+            var content = TryReadText(Path.Combine(root, summary.Path.Replace('/', Path.DirectorySeparatorChar)));
+            if (content is null)
+            {
+                result.Add(summary);
+                continue;
+            }
+
+            var metadata = ManagedFrontmatter.Parse(content);
+            result.Add(summary with
+            {
+                Body = metadata.Body,
+                Tags = metadata.Tags,
+                Color = metadata.Color,
+                Kind = metadata.Kind,
+                Archived = metadata.Archived,
+                Updated = summary.ModifiedAt,
+                ManagedId = metadata.Id ?? summary.ManagedId,
+            });
+        }
+
+        return result;
+    }
+
     public IReadOnlyList<SearchHitDto> SearchNotes(
         VaultRuntime runtime,
         string? query,
@@ -154,7 +188,7 @@ public sealed partial class VaultService
         var snapshot = Snapshot(runtime);
         var hits = SearchRecords(runtime, snapshot, query.Trim(), projectId, limit);
         return hits
-            .Select(hit => snapshot.ById.TryGetValue(hit.Id, out var note)
+            .Select((hit, index) => snapshot.ById.TryGetValue(hit.Id, out var note)
                 ? new SearchHitDto(
                     note.Id,
                     note.Title,
@@ -163,7 +197,8 @@ public sealed partial class VaultService
                     string.IsNullOrEmpty(hit.Snippet) ? note.Excerpt : hit.Snippet,
                     note.ModifiedAt,
                     note.Size,
-                    note.IsUntitled)
+                    note.IsUntitled,
+                    Math.Max(0.05, 1 - index * 0.01))
                 : null)
             .Where(hit => hit is not null)
             .Select(hit => hit!)
@@ -397,6 +432,229 @@ public sealed partial class VaultService
             gate.Release();
         }
     }
+
+    /// <summary>
+    /// Upsert used by the Papyra-compatible API. The client owns its own note
+    /// ids; they are kept in a small managed frontmatter block so a rename in
+    /// the native UI does not break the next publish. Everything the client
+    /// did not touch (foreign frontmatter keys, body text outside its markers)
+    /// survives.
+    /// </summary>
+    public async Task<SaveResult> SavePapyraNoteAsync(
+        VaultRuntime runtime,
+        string id,
+        SaveNoteRequest request,
+        string? ifMatch,
+        CancellationToken cancellationToken)
+    {
+        if (request.Body is null)
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "body-required", "A body is required.");
+        }
+
+        var body = MediaLibrary.NormalizeBody(request.Body);
+        var gate = _locks.GetOrAdd("papyra:" + runtime.Key, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var snapshot = Snapshot(runtime);
+            return snapshot.ById.TryGetValue(id, out var existing)
+                ? await UpdatePapyraNoteAsync(runtime, id, existing, body, request, ifMatch, cancellationToken)
+                : await CreatePapyraNoteAsync(runtime, id, body, request, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<SaveResult> UpdatePapyraNoteAsync(
+        VaultRuntime runtime,
+        string id,
+        VaultNote note,
+        string body,
+        SaveNoteRequest request,
+        string? ifMatch,
+        CancellationToken cancellationToken)
+    {
+        var gate = LockFor(note.FullPath);
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            note = RequireNote(runtime, id);
+            byte[] currentBytes;
+            try
+            {
+                currentBytes = await File.ReadAllBytesAsync(note.FullPath, cancellationToken);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                Invalidate(runtime.Key);
+                throw new ApiException(StatusCodes.Status404NotFound, "note-not-found", "Note not found.");
+            }
+
+            var currentEtag = ComputeEtag(currentBytes);
+            if (!string.IsNullOrWhiteSpace(ifMatch)
+                && ifMatch != "*"
+                && !string.Equals(ifMatch, currentEtag, StringComparison.OrdinalIgnoreCase))
+            {
+                var currentContent = Decode(currentBytes).Content;
+                var conflictPath = WriteConflictCopy(runtime, note, body);
+                return new SaveResult(null, new ConflictDto(
+                    "conflict",
+                    "The note changed on disk after it was read.",
+                    currentEtag,
+                    conflictPath,
+                    currentContent));
+            }
+
+            var content = Decode(currentBytes).Content;
+            var metadata = ManagedFrontmatter.Parse(content);
+            var oldId = note.Id;
+            var wasPinned = _index.For(runtime).PinnedIds().Contains(note.Id);
+
+            var targetPath = note.FullPath;
+            var desiredTitle = string.IsNullOrWhiteSpace(request.Title) ? note.Title : request.Title.Trim();
+            if (!string.Equals(desiredTitle, note.Title, StringComparison.Ordinal))
+            {
+                targetPath = RenameForPapyra(runtime, note, desiredTitle, targetPath);
+            }
+
+            var finalTitle = targetPath == note.FullPath
+                ? note.Title
+                : TitleHelper.TitleFromFile(targetPath);
+
+            var merged = ManagedFrontmatter.Merge(
+                content,
+                new ManagedFrontmatter(
+                    metadata.Id ?? ManagedFrontmatter.NormaliseId(id) ?? note.Id,
+                    finalTitle,
+                    request.Tags is null ? metadata.Tags : NormaliseTags(request.Tags),
+                    request.Color ?? metadata.Color,
+                    request.Kind ?? metadata.Kind,
+                    request.Archived ?? metadata.Archived,
+                    metadata.Created ?? note.CreatedAt,
+                    DateTimeOffset.UtcNow,
+                    body,
+                    metadata.Header));
+
+            SnapshotVersion(runtime, note, currentBytes);
+            var hasBom = HasBom(currentBytes);
+            var bytes = new UTF8Encoding(hasBom).GetBytes(merged);
+            await WriteAtomicAsync(targetPath, bytes, cancellationToken);
+            _hub.Suppress(runtime.Key, note.FullPath);
+            _hub.Suppress(runtime.Key, targetPath);
+            Invalidate(runtime.Key);
+
+            var relative = VaultPath.Relative(runtime.Paths.VaultRoot, targetPath);
+            var fresh = RequireNote(runtime, NoteIdFor(relative));
+            MoveVersions(runtime, oldId, fresh.Id);
+            if (request.Pinned is { } pinned)
+            {
+                _index.For(runtime).SetPinned(fresh.Id, pinned);
+                if (fresh.Id != oldId)
+                {
+                    _index.For(runtime).SetPinned(oldId, false);
+                }
+            }
+            else if (wasPinned && fresh.Id != oldId)
+            {
+                _index.For(runtime).MovePin(oldId, fresh.Id);
+            }
+
+            SnapshotVersion(runtime, fresh, bytes);
+            _hub.Publish(runtime.Key, new VaultChange("saved", fresh.Id, relative, DateTimeOffset.UtcNow));
+            return new SaveResult(ToNote(runtime, fresh, bytes), null);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<SaveResult> CreatePapyraNoteAsync(
+        VaultRuntime runtime,
+        string id,
+        string body,
+        SaveNoteRequest request,
+        CancellationToken cancellationToken)
+    {
+        var root = runtime.Paths.VaultRoot;
+        var requestedTitle = string.IsNullOrWhiteSpace(request.Title) ? id : request.Title.Trim();
+        var stem = TitleHelper.ToFileStem(requestedTitle);
+        if (stem.Length == 0 || TitleHelper.IsUuid(stem))
+        {
+            stem = TitleHelper.Untitled;
+        }
+
+        stem = TitleHelper.UniqueFileStem(root, stem, ".md");
+        var fullPath = Path.Combine(root, stem + ".md");
+        var relative = VaultPath.Relative(root, fullPath);
+        var title = TitleHelper.TitleFromFile(fullPath);
+        var now = DateTimeOffset.UtcNow;
+        var managedId = ManagedFrontmatter.NormaliseId(id) ?? NoteIdFor(relative);
+        var merged = ManagedFrontmatter.Merge(
+            string.Empty,
+            new ManagedFrontmatter(
+                managedId,
+                title,
+                NormaliseTags(request.Tags ?? []),
+                request.Color,
+                request.Kind ?? "note",
+                request.Archived ?? false,
+                now,
+                now,
+                body,
+                null));
+
+        var bytes = new UTF8Encoding(false).GetBytes(merged);
+        await WriteAtomicAsync(fullPath, bytes, cancellationToken);
+        _hub.Suppress(runtime.Key, fullPath);
+        Invalidate(runtime.Key);
+
+        var fresh = RequireNote(runtime, NoteIdFor(relative));
+        if (request.Pinned is { } pinned)
+        {
+            _index.For(runtime).SetPinned(fresh.Id, pinned);
+        }
+
+        _hub.Publish(runtime.Key, new VaultChange("created", fresh.Id, relative, DateTimeOffset.UtcNow));
+        return new SaveResult(ToNote(runtime, fresh, bytes), null);
+    }
+
+    private string RenameForPapyra(VaultRuntime runtime, VaultNote note, string title, string currentPath)
+    {
+        var stem = TitleHelper.ToFileStem(title);
+        if (stem.Length == 0 || TitleHelper.IsUuid(stem))
+        {
+            return currentPath;
+        }
+
+        var directory = Path.GetDirectoryName(currentPath)!;
+        var candidate = Path.Combine(directory, stem + ".md");
+        if (string.Equals(candidate, currentPath, StringComparison.Ordinal))
+        {
+            return currentPath;
+        }
+
+        if (File.Exists(candidate) || Directory.Exists(candidate))
+        {
+            candidate = Path.Combine(directory, TitleHelper.UniqueFileStem(directory, stem, ".md") + ".md");
+        }
+
+        File.Move(currentPath, candidate);
+        _hub.Suppress(runtime.Key, currentPath);
+        _hub.Suppress(runtime.Key, candidate);
+        return candidate;
+    }
+
+    private static IReadOnlyList<string> NormaliseTags(IReadOnlyList<string> tags)
+        => tags
+            .Select(tag => (tag ?? string.Empty).Trim())
+            .Where(tag => tag.Length is > 0 and <= 64)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(64)
+            .ToList();
 
     public IReadOnlyList<VersionDto> ListVersions(VaultRuntime runtime, string id)
     {
@@ -894,6 +1152,14 @@ public sealed partial class VaultService
         var fullPath = VaultPath.Combine(directory, relative);
         if (!File.Exists(fullPath))
         {
+            // Media published through the Papyra-compatible API lives at the
+            // library root; the same relative path keeps markdown portable
+            // when a project note references it.
+            fullPath = VaultPath.Combine(runtime.Paths.VaultRoot, relative);
+        }
+
+        if (!File.Exists(fullPath))
+        {
             throw new ApiException(StatusCodes.Status404NotFound, "asset-not-found", "Asset not found.");
         }
 
@@ -1240,7 +1506,8 @@ public sealed partial class VaultService
                     info.CreationTimeUtc,
                     info.Length,
                     ReadExcerpt(fullPath),
-                    title == TitleHelper.Untitled));
+                    title == TitleHelper.Untitled,
+                    ReadManagedId(fullPath)));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -1289,6 +1556,16 @@ public sealed partial class VaultService
         }
 
         var byId = notes.ToDictionary(note => note.Id, StringComparer.Ordinal);
+        foreach (var note in notes)
+        {
+            // The path hash stays the native id. The managed id is only an
+            // alias, and a native id always wins if the two ever collide.
+            if (note.ManagedId is { } managedId)
+            {
+                byId.TryAdd(managedId, note);
+            }
+        }
+
         return new VaultSnapshot(byId, notes, projects);
     }
 
@@ -1373,6 +1650,36 @@ public sealed partial class VaultService
         }
     }
 
+    private static string? ReadManagedId(string fullPath)
+    {
+        try
+        {
+            using var stream = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            var buffer = new byte[64 * 1024];
+            var read = stream.Read(buffer, 0, buffer.Length);
+            if (read == 0)
+            {
+                return null;
+            }
+
+            var text = Encoding.UTF8.GetString(buffer, 0, read);
+            if (text.Length > 0 && text[0] == '﻿')
+            {
+                text = text[1..];
+            }
+
+            return ManagedFrontmatter.ReadId(text);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private static string? TryReadText(string fullPath)
     {
         try
@@ -1446,6 +1753,7 @@ public sealed partial class VaultService
     private NoteDto ToNote(VaultRuntime runtime, VaultNote note, byte[] bytes)
     {
         var decoded = Decode(bytes);
+        var metadata = ManagedFrontmatter.Parse(decoded.Content);
         return new NoteDto(
             note.Id,
             note.Title,
@@ -1460,7 +1768,16 @@ public sealed partial class VaultService
             bytes.Length,
             note.IsUntitled,
             _index.For(runtime).PinnedIds().Contains(note.Id),
-            decoded.HasBom);
+            decoded.HasBom,
+            metadata.Body,
+            metadata.Tags,
+            metadata.Color,
+            metadata.Kind,
+            metadata.Archived,
+            false,
+            false,
+            note.ModifiedAt,
+            metadata.Id ?? note.ManagedId);
     }
 
     private SemaphoreSlim LockFor(string fullPath)
@@ -1491,7 +1808,8 @@ public sealed partial class VaultService
         DateTimeOffset CreatedAt,
         long Size,
         string Excerpt,
-        bool IsUntitled);
+        bool IsUntitled,
+        string? ManagedId = null);
 
     private sealed record WikiLinkHit(string Title, int Line, string Excerpt);
 

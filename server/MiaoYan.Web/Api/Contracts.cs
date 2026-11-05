@@ -19,7 +19,18 @@ public sealed record NoteSummaryDto(
     DateTimeOffset CreatedAt,
     long Size,
     bool IsUntitled,
-    bool Pinned);
+    bool Pinned,
+    // Papyra compatibility fields. Native list calls pass summary=1 and do not
+    // pay for reading every body.
+    string? Body = null,
+    IReadOnlyList<string>? Tags = null,
+    string? Color = null,
+    string Kind = "note",
+    bool Archived = false,
+    bool Secure = false,
+    bool Trashed = false,
+    DateTimeOffset? Updated = null,
+    string? ManagedId = null);
 
 public sealed record NoteDto(
     string Id,
@@ -35,9 +46,28 @@ public sealed record NoteDto(
     long Size,
     bool IsUntitled,
     bool Pinned,
-    bool HasBom);
+    bool HasBom,
+    string? Body = null,
+    IReadOnlyList<string>? Tags = null,
+    string? Color = null,
+    string Kind = "note",
+    bool Archived = false,
+    bool Secure = false,
+    bool Trashed = false,
+    DateTimeOffset? Updated = null,
+    string? ManagedId = null);
 
-public sealed record SaveNoteRequest(string? Content, string? Etag);
+public sealed record SaveNoteRequest(
+    string? Content,
+    string? Etag,
+    string? Body = null,
+    IReadOnlyList<string>? Tags = null,
+    string? Color = null,
+    string? Kind = null,
+    bool? Pinned = null,
+    bool? Archived = null,
+    bool? Secure = null,
+    string? Title = null);
 
 public sealed record RenameNoteRequest(string? Title, string? ProjectId, bool? Pinned = null);
 
@@ -98,7 +128,27 @@ public sealed record SearchHitDto(
     string Snippet,
     DateTimeOffset ModifiedAt,
     long Size,
-    bool IsUntitled);
+    bool IsUntitled,
+    double Score = 1);
+
+public sealed record PapyraCategoryDto(string Name, string? Color, int Count);
+
+public sealed record PapyraCategoryRequest(string? Name, string? Color);
+
+public sealed record PapyraMediaDto(
+    string Filename,
+    string Kind,
+    string Mime,
+    long Size,
+    string Version,
+    string Url,
+    string Markdown,
+    int? Width = null,
+    int? Height = null,
+    long? DurationMs = null,
+    bool? Animated = null,
+    string? Poster = null,
+    string? Thumb = null);
 
 public sealed record VersionDto(
     string Id,
