@@ -1,4 +1,5 @@
 using System.Reflection;
+using MiaoYan.Web.Api;
 using MiaoYan.Web.Options;
 using MiaoYan.Web.Services;
 using Microsoft.AspNetCore.Diagnostics;
@@ -23,9 +24,13 @@ options.PlantUmlJar ??= Environment.GetEnvironmentVariable("MIAOYAN_PLANTUML_JAR
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<VaultRegistry>();
+builder.Services.AddSingleton<VaultEventHub>();
+builder.Services.AddSingleton<VaultService>();
+builder.Services.AddSingleton<VaultWatcher>();
 builder.Services.AddSingleton<CapabilitiesService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<VaultResolutionExceptionHandler>();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
@@ -39,8 +44,13 @@ var app = builder.Build();
 // request is served. A LazyCat device shared by several people may have no
 // default yet; per-request resolution handles them.
 var vaults = app.Services.GetRequiredService<VaultRegistry>();
+var watcher = app.Services.GetRequiredService<VaultWatcher>();
 var capabilities = app.Services.GetRequiredService<CapabilitiesService>();
 var startupVault = vaults.TryResolveDefault();
+if (startupVault is not null)
+{
+    watcher.Ensure(startupVault);
+}
 app.Logger.LogInformation(
     "MiaoYan Web {Version}: mode={Mode}, users={Users}, defaultVault={Vault}, SQLite {SqliteVersion} (fts5={Fts5}, trigram={Trigram}), PlantUML={PlantUml}",
     Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "dev",
@@ -137,6 +147,7 @@ app.MapGet("/healthz", (VaultRegistry v, CapabilitiesService c) =>
 });
 
 app.MapGet("/api/health", () => Results.Redirect("/healthz"));
+app.MapVaultApi();
 
 app.MapFallback("/api/{**path}", (HttpContext context) => Results.Json(
     new { error = "not-found", path = context.Request.Path.Value },
