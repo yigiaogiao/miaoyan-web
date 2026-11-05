@@ -67,6 +67,11 @@ export interface Asset {
   kind: string;
 }
 
+export interface MediaToolResult {
+  kind: 'ocr' | 'transcribe';
+  text: string;
+}
+
 export interface LinkTarget {
   title: string;
   noteId: string;

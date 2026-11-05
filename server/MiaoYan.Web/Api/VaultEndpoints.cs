@@ -197,6 +197,34 @@ public static class VaultEndpoints
             return Results.File(asset.FullPath, contentType, enableRangeProcessing: true);
         });
 
+        api.MapPost("/notes/{id}/ocr", async (
+            string id,
+            MediaToolRequest? request,
+            HttpContext context,
+            VaultRegistry vaults,
+            VaultWatcher watcher,
+            MediaToolsService tools,
+            CancellationToken cancellationToken) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            var text = await tools.RunAsync(runtime, "ocr", id, request?.Path, cancellationToken);
+            return Results.Ok(new MediaToolResult("ocr", text));
+        });
+
+        api.MapPost("/notes/{id}/transcribe", async (
+            string id,
+            MediaToolRequest? request,
+            HttpContext context,
+            VaultRegistry vaults,
+            VaultWatcher watcher,
+            MediaToolsService tools,
+            CancellationToken cancellationToken) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            var text = await tools.RunAsync(runtime, "transcribe", id, request?.Path, cancellationToken);
+            return Results.Ok(new MediaToolResult("transcribe", text));
+        });
+
         api.MapPost("/media/upload", async (HttpContext context, VaultRegistry vaults, MediaLibrary media, MiaoYanOptions options, CancellationToken cancellationToken) =>
         {
             var runtime = vaults.Resolve(context);

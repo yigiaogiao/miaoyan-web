@@ -2,6 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  AudioLines,
   Bold,
   Check,
   Code2,
@@ -36,6 +37,7 @@ import {
   Printer,
   Quote,
   RotateCcw,
+  ScanText,
   Settings2,
   Sigma,
   Strikethrough,
@@ -161,6 +163,8 @@ export function EditorPane({
 
   const editorRef = useRef<CodeEditorHandle>(null);
   const previewRef = useRef<MarkdownPreviewHandle>(null);
+  const ocrInputRef = useRef<HTMLInputElement>(null);
+  const transcribeInputRef = useRef<HTMLInputElement>(null);
   const syncSource = useRef<'editor' | 'preview' | null>(null);
   const syncTimer = useRef(0);
   const etagRef = useRef<string | null>(null);
@@ -402,6 +406,36 @@ export function EditorPane({
         toast(reason instanceof Error ? reason.message : '附件上传失败', 'error');
       } finally {
         setUploading((count) => Math.max(0, count - files.length));
+      }
+    },
+    [toast],
+  );
+
+  const runMediaTool = useCallback(
+    async (kind: 'ocr' | 'transcribe', files: FileList | null) => {
+      const file = files?.[0];
+      const current = noteRef.current;
+      if (!file || !current) {
+        return;
+      }
+
+      try {
+        const asset = await api.uploadAsset(current.id, file);
+        const path = `${asset.kind === 'image' ? 'i' : 'files'}/${asset.name}`;
+        toast(kind === 'ocr' ? '正在识别图片…' : '正在转写音频…', 'info');
+        const result =
+          kind === 'ocr'
+            ? await api.ocrAsset(current.id, path)
+            : await api.transcribeAsset(current.id, path);
+        if (!result.text) {
+          toast(kind === 'ocr' ? '图片里没有识别到文字' : '没有转写结果', 'error');
+          return;
+        }
+
+        editorRef.current?.insertText(`${asset.markdown}\n\n${result.text}\n`);
+        toast(kind === 'ocr' ? '已插入识别文字' : '已插入转写文字', 'success');
+      } catch (reason) {
+        toast(reason instanceof Error ? reason.message : '处理失败', 'error');
       }
     },
     [toast],
@@ -822,6 +856,19 @@ export function EditorPane({
               </DropdownMenu.Item>
               <DropdownMenu.Separator className="my-1 h-px bg-[var(--border)]" />
               <DropdownMenu.Item
+                onSelect={() => ocrInputRef.current?.click()}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
+              >
+                <ScanText size={13} /> 图片文字识别
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={() => transcribeInputRef.current?.click()}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
+              >
+                <AudioLines size={13} /> 音频转写
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-[var(--border)]" />
+              <DropdownMenu.Item
                 onSelect={() => exportMarkdown(note.title, contentRef.current)}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-[var(--accent-soft)]"
               >
@@ -1210,6 +1257,27 @@ export function EditorPane({
         onLoadDisk={restoreFromDisk}
         onKeepMine={() => void keepMine()}
         onClose={() => setConflict(null)}
+      />
+
+      <input
+        ref={ocrInputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(event) => {
+          void runMediaTool('ocr', event.target.files);
+          event.target.value = '';
+        }}
+      />
+      <input
+        ref={transcribeInputRef}
+        type="file"
+        accept="audio/*,video/*"
+        hidden
+        onChange={(event) => {
+          void runMediaTool('transcribe', event.target.files);
+          event.target.value = '';
+        }}
       />
     </section>
   );

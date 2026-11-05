@@ -29,6 +29,7 @@ builder.Services.AddSingleton<VaultEventHub>();
 builder.Services.AddSingleton<NoteIndexService>();
 builder.Services.AddSingleton<VaultService>();
 builder.Services.AddSingleton<MediaLibrary>();
+builder.Services.AddSingleton<MediaToolsService>();
 builder.Services.AddSingleton<CategoryStore>();
 builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<VaultWatcher>();

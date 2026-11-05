@@ -9,6 +9,7 @@ import type {
   NoteSummary,
   NoteVersion,
   NoteVersionDetail,
+  MediaToolResult,
   Project,
   SaveNoteBody,
   SearchHit,
@@ -155,6 +156,17 @@ export const api = {
       body: form,
     });
   },
+
+  ocrAsset: (noteId: string, path: string) =>
+    request<MediaToolResult>(`/api/notes/${encodeURIComponent(noteId)}/ocr`, {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    }),
+  transcribeAsset: (noteId: string, path: string) =>
+    request<MediaToolResult>(`/api/notes/${encodeURIComponent(noteId)}/transcribe`, {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    }),
 
   trash: () => request<TrashEntry[]>('/api/trash'),
   restoreTrash: (id: string) =>

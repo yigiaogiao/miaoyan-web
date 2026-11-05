@@ -166,6 +166,10 @@ public sealed record VersionDetailDto(
 
 public sealed record RestoreVersionRequest(string? Etag);
 
+public sealed record MediaToolRequest(string? Path);
+
+public sealed record MediaToolResult(string Kind, string Text);
+
 public sealed record VaultInfoDto(
     string Name,
     string Root,
