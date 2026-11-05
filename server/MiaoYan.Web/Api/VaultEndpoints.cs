@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using MiaoYan.Web.Options;
 using MiaoYan.Web.Services;
@@ -20,6 +21,70 @@ public static class VaultEndpoints
         {
             var runtime = Resolve(context, vaults, watcher);
             return Results.Ok(service.GetInfo(runtime));
+        });
+
+        api.MapGet("/export/vault", (HttpContext context, VaultRegistry vaults, VaultWatcher watcher) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            var root = runtime.Paths.VaultRoot;
+            var name = $"MiaoYan-export-{DateTime.UtcNow:yyyyMMdd}.zip";
+            return Results.Stream(async output =>
+            {
+                // ZipArchive writes its central directory synchronously when it is
+                // disposed. Kestrel's response body rejects synchronous writes, so
+                // build the archive in a temp file first, then stream it out.
+                var temp = Path.Combine(Path.GetTempPath(), $"miaoyan-export-{Guid.NewGuid():N}.zip");
+                try
+                {
+                    await using (var fileStream = new FileStream(
+                        temp, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                        64 * 1024, useAsync: true))
+                    {
+                        using var archive = new ZipArchive(fileStream, ZipArchiveMode.Create, leaveOpen: true);
+                        foreach (var file in EnumerateExportFiles(root))
+                        {
+                            var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+                            var entry = archive.CreateEntry(relative, CompressionLevel.Fastest);
+                            await using var source = new FileStream(
+                                file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
+                                64 * 1024, useAsync: true);
+                            await using var target = entry.Open();
+                            await source.CopyToAsync(target, context.RequestAborted);
+                        }
+                    }
+
+                    await using var read = new FileStream(
+                        temp, FileMode.Open, FileAccess.Read, FileShare.Read,
+                        64 * 1024, useAsync: true);
+                    await read.CopyToAsync(output, context.RequestAborted);
+                }
+                finally
+                {
+                    try
+                    {
+                        File.Delete(temp);
+                    }
+                    catch (IOException)
+                    {
+                        // Best-effort cleanup; a leftover temp file is harmless.
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                    }
+                }
+            }, "application/zip", name);
+        });
+
+        api.MapGet("/maintenance/unused-assets", (HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            return Results.Ok(service.FindUnusedAssets(runtime));
+        });
+
+        api.MapPost("/maintenance/unused-assets/clean", (HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
+        {
+            var runtime = Resolve(context, vaults, watcher);
+            return Results.Ok(service.CleanUnusedAssets(runtime));
         });
 
         api.MapGet("/projects", (HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
@@ -400,6 +465,55 @@ public static class VaultEndpoints
         finally
         {
             hub.Unsubscribe(runtime.Key, subscriptionId);
+        }
+    }
+
+    /// <summary>
+    /// Vault export walks the library itself, skipping dot-directories
+    /// (app trash, conflict backups, VCS metadata) and symlinks so an export
+    /// can never leave the library root.
+    /// </summary>
+    private static IEnumerable<string> EnumerateExportFiles(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            FileSystemInfo[] entries;
+            try
+            {
+                entries = new DirectoryInfo(directory).GetFileSystemInfos();
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var entry in entries)
+            {
+                if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+                if (entry is DirectoryInfo child)
+                {
+                    if (child.Name.StartsWith('.') ||
+                        string.Equals(child.Name, "node_modules", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    pending.Push(child.FullName);
+                }
+                else
+                {
+                    yield return entry.FullName;
+                }
+            }
         }
     }
 

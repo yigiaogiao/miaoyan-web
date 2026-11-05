@@ -11,6 +11,8 @@ namespace MiaoYan.Web.Services;
 public sealed record SaveResult(NoteDto? Note, ConflictDto? Conflict);
 public sealed record TrashRestoreResult(string Kind, string? NoteId, string? ProjectId);
 public sealed record AssetFile(string FullPath, string FileName);
+public sealed record UnusedAssetsResult(int ScannedNotes, IReadOnlyList<string> Files);
+public sealed record CleanUnusedAssetsResult(IReadOnlyList<string> Removed, IReadOnlyList<string> Failed);
 
 /// <summary>
 /// Filesystem-backed library operations. The scan is held in memory and
@@ -28,6 +30,13 @@ public sealed partial class VaultService
     private readonly ILogger<VaultService> _logger;
     private readonly ConcurrentDictionary<string, VaultCache> _caches = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.Ordinal);
+
+    // Same shape as MiaoYan's Note.attachmentPathRegex: an i/ or files/ path,
+    // optionally preceded by ./ ../ or /, ending at whitespace, a quote or a
+    // closing parenthesis.
+    private static readonly Regex AttachmentPathRegex = new(
+        @"(?:(?:\.\./|\./|/)*)(?:i|files)/[^)\s'""]+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly JsonSerializerOptions TrashJson = new(JsonSerializerDefaults.Web)
     {
@@ -1778,6 +1787,345 @@ public sealed partial class VaultService
             false,
             note.ModifiedAt,
             metadata.Id ?? note.ManagedId);
+    }
+
+    /// <summary>
+    /// Lists files under i/ and files/ that no note body references. Matching
+    /// mirrors MiaoYan's cleanup: notes are read from disk, i/files paths are
+    /// resolved against the note folder but bounded by the library, and
+    /// attachments named by a Trash note are kept so a restore still works.
+    /// </summary>
+    public UnusedAssetsResult FindUnusedAssets(VaultRuntime runtime)
+    {
+        var root = Path.GetFullPath(runtime.Paths.VaultRoot);
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        var trashNames = new HashSet<string>(StringComparer.Ordinal);
+        var scanned = 0;
+
+        foreach (var noteFile in EnumerateNoteFiles(root))
+        {
+            var relative = Path.GetRelativePath(root, noteFile).Replace('\\', '/');
+            var inTrash = relative.StartsWith(".miaoyan/trash/", StringComparison.Ordinal);
+            string text;
+            try
+            {
+                text = File.ReadAllText(noteFile);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A body that cannot be read could reference any attachment.
+                // Refuse the scan rather than offer a destructive answer.
+                throw new ApiException(
+                    StatusCodes.Status500InternalServerError,
+                    "scan-failed",
+                    $"Could not read {relative}; no attachments were removed.");
+            }
+
+            scanned += 1;
+            var noteDirectory = Path.GetDirectoryName(noteFile)!;
+            foreach (Match match in AttachmentPathRegex.Matches(text))
+            {
+                var resolved = ResolveAttachmentPath(root, noteDirectory, match.Value);
+                if (resolved is null)
+                {
+                    continue;
+                }
+
+                if (inTrash)
+                {
+                    trashNames.Add(Path.GetFileName(resolved));
+                }
+                else
+                {
+                    referenced.Add(resolved);
+                }
+            }
+        }
+
+        var files = new List<string>();
+        foreach (var attachment in EnumerateAttachmentFiles(root))
+        {
+            var full = Path.GetFullPath(attachment);
+            if (referenced.Contains(full) || trashNames.Contains(Path.GetFileName(full)))
+            {
+                continue;
+            }
+
+            files.Add(Path.GetRelativePath(root, full).Replace('\\', '/'));
+        }
+
+        files.Sort(StringComparer.Ordinal);
+        return new UnusedAssetsResult(scanned, files);
+    }
+
+    /// <summary>
+    /// Moves unreferenced attachments into the app trash instead of deleting
+    /// them. MiaoYan uses the macOS Trash; the app trash is the browser/LazyCat
+    /// equivalent and keeps cleanup recoverable.
+    /// </summary>
+    public CleanUnusedAssetsResult CleanUnusedAssets(VaultRuntime runtime)
+    {
+        var root = Path.GetFullPath(runtime.Paths.VaultRoot);
+        var scan = FindUnusedAssets(runtime);
+        if (scan.Files.Count == 0)
+        {
+            return new CleanUnusedAssetsResult([], []);
+        }
+
+        var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
+        var trashRoot = Path.Combine(root, ".miaoyan", "trash-assets", stamp);
+        var removed = new List<string>();
+        var failed = new List<string>();
+        foreach (var relative in scan.Files)
+        {
+            var source = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+            var destination = Path.Combine(trashRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            try
+            {
+                destination = UniqueDestination(destination);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Move(source, destination);
+                _hub.Suppress(runtime.Key, source);
+                removed.Add(relative);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                failed.Add(relative);
+                _logger.LogWarning(ex, "Could not move unused attachment {Path}", relative);
+            }
+        }
+
+        if (removed.Count > 0)
+        {
+            Invalidate(runtime.Key);
+            _hub.Publish(runtime.Key, new VaultChange("assets-cleaned", null, ".miaoyan/trash-assets", DateTimeOffset.UtcNow));
+        }
+
+        return new CleanUnusedAssetsResult(removed, failed);
+    }
+
+    private static IEnumerable<string> EnumerateNoteFiles(string root)
+    {
+        foreach (var file in EnumerateTree(root, includeTrash: true))
+        {
+            if (string.Equals(Path.GetExtension(file), ".md", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return file;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateAttachmentFiles(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            FileSystemInfo[] entries;
+            try
+            {
+                entries = new DirectoryInfo(directory).GetFileSystemInfos();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var entry in entries)
+            {
+                if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
+                if (entry is DirectoryInfo child)
+                {
+                    if (child.Name.StartsWith('.') ||
+                        string.Equals(child.Name, "node_modules", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (child.Name is "i" or "files")
+                    {
+                        foreach (var file in EnumerateFilesUnder(child.FullName))
+                        {
+                            yield return file;
+                        }
+                        continue;
+                    }
+
+                    pending.Push(child.FullName);
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateFilesUnder(string directory)
+    {
+        var pending = new Stack<string>();
+        pending.Push(directory);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            FileSystemInfo[] entries;
+            try
+            {
+                entries = new DirectoryInfo(current).GetFileSystemInfos();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var entry in entries)
+            {
+                if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
+                if (entry is DirectoryInfo child)
+                {
+                    if (!child.Name.StartsWith('.'))
+                    {
+                        pending.Push(child.FullName);
+                    }
+                    continue;
+                }
+
+                if (entry.Name.StartsWith('.') || entry.Name.EndsWith(".icloud", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                yield return entry.FullName;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateTree(string root, bool includeTrash)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            FileSystemInfo[] entries;
+            try
+            {
+                entries = new DirectoryInfo(directory).GetFileSystemInfos();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var entry in entries)
+            {
+                if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
+                if (entry is DirectoryInfo child)
+                {
+                    if (child.Name.StartsWith('.'))
+                    {
+                        if (!includeTrash || child.Name != ".miaoyan")
+                        {
+                            continue;
+                        }
+                    }
+                    else if (string.Equals(child.Name, "node_modules", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    pending.Push(child.FullName);
+                    continue;
+                }
+
+                var relative = Path.GetRelativePath(root, entry.FullName).Replace('\\', '/');
+                if (relative.StartsWith(".miaoyan/", StringComparison.Ordinal) &&
+                    !relative.StartsWith(".miaoyan/trash/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                yield return entry.FullName;
+            }
+        }
+    }
+
+    private static string? ResolveAttachmentPath(string root, string noteDirectory, string raw)
+    {
+        var decoded = raw;
+        try
+        {
+            decoded = Uri.UnescapeDataString(raw);
+        }
+        catch (UriFormatException)
+        {
+        }
+
+        if (decoded.Length == 0)
+        {
+            return null;
+        }
+
+        string candidate;
+        if (decoded[0] == '/')
+        {
+            candidate = Path.Combine(root, decoded.TrimStart('/'));
+        }
+        else
+        {
+            if (decoded.StartsWith("./", StringComparison.Ordinal))
+            {
+                decoded = decoded[2..];
+            }
+
+            candidate = Path.Combine(noteDirectory, decoded.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        string full;
+        try
+        {
+            full = Path.GetFullPath(candidate);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+
+        var rootPrefix = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        return full.StartsWith(rootPrefix, StringComparison.Ordinal) ? full : null;
+    }
+
+    private static string UniqueDestination(string destination)
+    {
+        if (!File.Exists(destination))
+        {
+            return destination;
+        }
+
+        var directory = Path.GetDirectoryName(destination)!;
+        var stem = Path.GetFileNameWithoutExtension(destination);
+        var extension = Path.GetExtension(destination);
+        for (var index = 1; index < 1000; index += 1)
+        {
+            var candidate = Path.Combine(directory, $"{stem}-{index}{extension}");
+            if (!File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new IOException("No free destination name for trash entry.");
     }
 
     private SemaphoreSlim LockFor(string fullPath)

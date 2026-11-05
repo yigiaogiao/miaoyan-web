@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
@@ -5,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using MiaoYan.Web.Api;
+using MiaoYan.Web.Services;
 
 namespace MiaoYan.Web.Tests;
 
@@ -453,6 +455,71 @@ public sealed class VaultApiTests : IClassFixture<VaultApiTests.VaultFixture>
         var again = await _vault.Client.GetFromJsonAsync<List<ProjectDto>>("/api/projects");
         var listed = Assert.Single(again!, item => item.Id == project.Id);
         Assert.Equal(1, listed.NoteCount);
+    }
+
+    [Fact]
+    public async Task ExportVault_ReturnsZipAndSkipsDotDirectories()
+    {
+        var note = await _vault.CreateNoteAsync();
+        var renamed = await _vault.Client.PatchAsJsonAsync(
+            $"/api/notes/{note.Id}", new RenameNoteRequest("导出测试", null));
+        renamed.EnsureSuccessStatusCode();
+
+        var hidden = Path.Combine(_vault.Library, ".miaoyan", "trash");
+        Directory.CreateDirectory(hidden);
+        await File.WriteAllTextAsync(Path.Combine(hidden, "deleted.md"), "trashed");
+
+        var response = await _vault.Client.GetAsync("/api/export/vault");
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("application/zip", response.Content.Headers.ContentType?.MediaType);
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        Assert.Contains(archive.Entries, entry => entry.FullName == "导出测试.md");
+        Assert.DoesNotContain(archive.Entries, entry => entry.FullName.StartsWith(".miaoyan/"));
+    }
+
+    [Fact]
+    public async Task CleanUnusedAssets_MovesOnlyUnreferencedFiles()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var note = await _vault.CreateNoteAsync();
+        var renamed = await _vault.Client.PatchAsJsonAsync(
+            $"/api/notes/{note.Id}", new RenameNoteRequest($"附件清理-{suffix}", null));
+        renamed.EnsureSuccessStatusCode();
+        var target = await renamed.Content.ReadFromJsonAsync<NoteDto>();
+        Assert.NotNull(target);
+
+        var directory = Path.Combine(_vault.Library, "i");
+        Directory.CreateDirectory(directory);
+        var usedName = $"cleanup-used-{suffix}.png";
+        var orphanName = $"cleanup-orphan-{suffix}.png";
+        await File.WriteAllBytesAsync(Path.Combine(directory, usedName), [0x89, 0x50]);
+        await File.WriteAllBytesAsync(Path.Combine(directory, orphanName), [0x89, 0x50]);
+
+        var saved = await _vault.Client.PutAsJsonAsync(
+            $"/api/notes/{target.Id}",
+            new SaveNoteRequest($"![](i/{usedName})\n", target.Etag));
+        saved.EnsureSuccessStatusCode();
+
+        var scan = await _vault.Client.GetFromJsonAsync<UnusedAssetsResult>(
+            "/api/maintenance/unused-assets");
+        Assert.NotNull(scan);
+        Assert.Contains($"i/{orphanName}", scan!.Files);
+        Assert.DoesNotContain($"i/{usedName}", scan.Files);
+
+        var clean = await _vault.Client.PostAsync("/api/maintenance/unused-assets/clean", null);
+        clean.EnsureSuccessStatusCode();
+        var result = await clean.Content.ReadFromJsonAsync<CleanUnusedAssetsResult>();
+        Assert.NotNull(result);
+        Assert.Contains($"i/{orphanName}", result!.Removed);
+
+        Assert.False(File.Exists(Path.Combine(directory, orphanName)));
+        Assert.True(File.Exists(Path.Combine(directory, usedName)));
+        Assert.NotEmpty(Directory.EnumerateFiles(
+            Path.Combine(_vault.Library, ".miaoyan", "trash-assets"),
+            orphanName,
+            SearchOption.AllDirectories));
     }
 
     public sealed record TrashRestoreResultDto(string Kind, string? NoteId, string? ProjectId);
