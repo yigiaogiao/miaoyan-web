@@ -17,6 +17,12 @@ public static partial class TitleHelper
     [GeneratedRegex(@"[\\*?""<>|\x00-\x1F]")]
     private static partial Regex InvalidFileNameChars();
 
+    // Markdown image/link destinations and MiaoYan's attachment scanner end at
+    // whitespace, quotes and closing parentheses. Keep those characters out of
+    // attachment names so a generated link always parses as an image.
+    [GeneratedRegex(@"[\s:()\[\]{}'""#?%]+")]
+    private static partial Regex UnsafeAssetChars();
+
     public static bool IsUuid(string value) => UuidRegex().IsMatch(value);
 
     public static string TitleFromFile(string fileName)
@@ -42,6 +48,20 @@ public static partial class TitleHelper
         value = InvalidFileNameChars().Replace(value, "-");
         value = value.Trim(' ', '.');
         return value;
+    }
+
+    /// <summary>
+    /// Attachment names must survive both Markdown and the attachment scanner.
+    /// Note titles keep spaces (MiaoYan does the same), but an image called
+    /// "image 1.png" would produce <c>![](i/image 1.png)</c>, which is plain
+    /// text in CommonMark. Collapse unsafe characters to a single dash.
+    /// </summary>
+    public static string ToAssetStem(string name)
+    {
+        var value = ToFileStem(name);
+        value = UnsafeAssetChars().Replace(value, "-");
+        value = Regex.Replace(value, "-{2,}", "-");
+        return value.Trim('-', ' ', '.');
     }
 
     public static string ToProjectName(string name)

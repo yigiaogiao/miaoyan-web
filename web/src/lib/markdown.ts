@@ -86,12 +86,91 @@ const ALERT_LABELS: Record<string, string> = {
 
 const defaultImage = md.renderer.rules.image!;
 
+const ASSET_DESTINATION = /^(?:\.\/|\/)?(?:i|files)\//;
+const FENCE_LINE = /^\s*(`{3,}|~{3,})/;
+
+function decodePathSegments(value: string): string {
+  return value
+    .split('/')
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .join('/');
+}
+
+/**
+ * Older uploads wrote filenames such as "image 1.png" straight into the
+ * Markdown destination. CommonMark does not allow unescaped spaces there, so
+ * the line rendered as text. Wrap only i/ and files/ destinations in angle
+ * brackets, leaving fenced and inline code untouched.
+ */
+function repairAssetDestinations(content: string): string {
+  if (!content.includes('i/') && !content.includes('files/')) {
+    return content;
+  }
+
+  const lines = content.split('\n');
+  let fence: string | null = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const fenceMatch = line.match(FENCE_LINE);
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0];
+      if (fence === null) {
+        fence = marker;
+      } else if (fence === marker) {
+        fence = null;
+      }
+      continue;
+    }
+
+    if (fence !== null) {
+      continue;
+    }
+
+    lines[index] = line.replace(/`[^`\n]*`|!?\[[^\]]*\]\([^)\n]*\)/g, (match) => {
+      if (match.startsWith('`')) {
+        return match;
+      }
+
+      const destination = match.match(/^!?\[[^\]]*\]\(([^)\n]*)\)$/)?.[1];
+      if (destination === undefined) {
+        return match;
+      }
+
+      const trimmed = destination.trim();
+      if (
+        !trimmed ||
+        trimmed.startsWith('<') ||
+        !/\s/.test(trimmed) ||
+        !ASSET_DESTINATION.test(trimmed)
+      ) {
+        return match;
+      }
+
+      const titleIndex = trimmed.search(/\s+["']/);
+      const path = titleIndex > 0 ? trimmed.slice(0, titleIndex) : trimmed;
+      const title = titleIndex > 0 ? trimmed.slice(titleIndex) : '';
+      const open = match.lastIndexOf('(');
+      return `${match.slice(0, open + 1)}<${path}>${title})`;
+    });
+  }
+
+  return lines.join('\n');
+}
+
 function rewriteSource(source: string, noteId: string): string {
   if (/^(https?:|data:|blob:)/i.test(source)) {
     return source;
   }
 
-  const clean = source.replace(/^\.\//, '').replace(/^\//, '');
+  // markdown-it normalises angle-bracket destinations to percent escapes.
+  // assetUrl encodes each segment again, so decode first to avoid %2520.
+  const clean = decodePathSegments(source.replace(/^\.\//, '').replace(/^\//, ''));
   if (clean.startsWith('i/') || clean.startsWith('files/')) {
     return assetUrl(noteId, clean);
   }
@@ -534,7 +613,7 @@ export function renderMarkdown(
   linkTitles?: ReadonlySet<string>,
   options?: { skipHighlight?: boolean },
 ): string {
-  const html = md.render(stripFrontmatter(content), {
+  const html = md.render(repairAssetDestinations(stripFrontmatter(content)), {
     noteId,
     skipHighlight: options?.skipHighlight,
     linkTitles: linkTitles ? new Set([...linkTitles].map((title) => title.toLowerCase())) : undefined,
@@ -555,7 +634,7 @@ export function renderMarkdownDocument(
   const previous = md.options.html;
   md.options.html = true;
   try {
-    const html = md.render(content, {
+    const html = md.render(repairAssetDestinations(content), {
       noteId,
       linkTitles: linkTitles
         ? new Set([...linkTitles].map((title) => title.toLowerCase()))

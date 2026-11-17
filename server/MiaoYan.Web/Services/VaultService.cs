@@ -38,6 +38,14 @@ public sealed partial class VaultService
         @"(?:(?:\.\./|\./|/)*)(?:i|files)/[^)\s'""]+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    // Notes written before attachment names were sanitised can contain
+    // ![](i/image 1.png). AttachmentPathRegex stops at the space, which would
+    // make cleanup treat the image as unused, so also read the full Markdown
+    // destination from image/link syntax.
+    private static readonly Regex MarkdownDestinationRegex = new(
+        @"!?\[[^\]]*\]\(([^)\r\n]*)\)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly JsonSerializerOptions TrashJson = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -1104,7 +1112,7 @@ public sealed partial class VaultService
         Directory.CreateDirectory(targetDirectory);
 
         var originalName = Path.GetFileName(file.FileName);
-        var stem = TitleHelper.ToFileStem(Path.GetFileNameWithoutExtension(originalName));
+        var stem = TitleHelper.ToAssetStem(Path.GetFileNameWithoutExtension(originalName));
         if (stem.Length == 0)
         {
             stem = isImage ? "image" : "attachment";
@@ -1828,9 +1836,9 @@ public sealed partial class VaultService
 
             scanned += 1;
             var noteDirectory = Path.GetDirectoryName(noteFile)!;
-            foreach (Match match in AttachmentPathRegex.Matches(text))
+            foreach (var reference in EnumerateAttachmentReferences(text))
             {
-                var resolved = ResolveAttachmentPath(root, noteDirectory, match.Value);
+                var resolved = ResolveAttachmentPath(root, noteDirectory, reference);
                 if (resolved is null)
                 {
                     continue;
@@ -2061,6 +2069,37 @@ public sealed partial class VaultService
 
                 yield return entry.FullName;
             }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateAttachmentReferences(string text)
+    {
+        foreach (Match match in AttachmentPathRegex.Matches(text))
+        {
+            yield return match.Value;
+        }
+
+        foreach (Match match in MarkdownDestinationRegex.Matches(text))
+        {
+            var destination = match.Groups[1].Value.Trim();
+            if (destination.StartsWith('<') && destination.EndsWith('>'))
+            {
+                destination = destination[1..^1].Trim();
+            }
+
+            // Drop an optional Markdown title: ![](i/photo.png "caption").
+            var titleIndex = destination.IndexOfAny(['"', '\'']);
+            if (titleIndex > 0)
+            {
+                destination = destination[..titleIndex].TrimEnd();
+            }
+
+            if (!Regex.IsMatch(destination, @"^(?:\./|/)?(?:i|files)/"))
+            {
+                continue;
+            }
+
+            yield return destination;
         }
     }
 

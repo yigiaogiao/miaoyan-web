@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using MiaoYan.Web.Api;
+using MiaoYan.Web.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace MiaoYan.Web.Tests;
@@ -71,6 +72,40 @@ public sealed class MediaToolsTests : IClassFixture<MediaToolsTests.ToolsFixture
             new MediaToolRequest("i/../../outside.png"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AssetUploadSanitizesMarkdownBreakingNames()
+    {
+        var note = await _tools.CreateNoteAsync("图片");
+        var asset = await _tools.UploadAsync(
+            note.Id, "image 1 (copy).png", "image/png", [0x89, 0x50]);
+
+        Assert.Equal("image-1-copy.png", asset.Name);
+        Assert.Equal("![](i/image-1-copy.png)", asset.Markdown);
+        Assert.DoesNotContain(" ", asset.Markdown);
+
+        var served = await _tools.Client.GetAsync(asset.Url);
+        served.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task UnusedAssetsKeepsLegacySpacedMarkdownReferences()
+    {
+        var note = await _tools.CreateNoteAsync("旧图片");
+        var directory = Path.Combine(_tools.Library, "i");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllBytesAsync(Path.Combine(directory, "image 1.png"), [0x89, 0x50]);
+
+        var saved = await _tools.Client.PutAsJsonAsync(
+            $"/api/notes/{note.Id}",
+            new SaveNoteRequest("![](i/image 1.png)\n", note.Etag));
+        saved.EnsureSuccessStatusCode();
+
+        var scan = await _tools.Client.GetFromJsonAsync<UnusedAssetsResult>(
+            "/api/maintenance/unused-assets");
+        Assert.NotNull(scan);
+        Assert.DoesNotContain("i/image 1.png", scan!.Files);
     }
 
     [Fact]

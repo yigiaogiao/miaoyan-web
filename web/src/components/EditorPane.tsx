@@ -675,9 +675,21 @@ export function EditorPane({
           <div className="flex items-baseline gap-1.5 text-[12px] text-[var(--text-faint)]">
             {note.projectName && <span className="truncate">{note.projectName}</span>}
             {note.projectName && <span className="opacity-60">/</span>}
-            <span className="truncate text-[13px] font-semibold tracking-tight text-[var(--text)]">
-              {note.title}
-            </span>
+            <button
+              type="button"
+              onClick={() => onRename(note)}
+              title={t('notes.renameTitle')}
+              aria-label={t('notes.renameTitle')}
+              className="group flex min-w-0 items-center gap-1 rounded-md text-left outline-none hover:bg-[var(--surface-hover)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            >
+              <span className="truncate text-[13px] font-semibold tracking-tight text-[var(--text)]">
+                {note.title}
+              </span>
+              <Pencil
+                size={11}
+                className="shrink-0 text-[var(--text-faint)] opacity-40 transition-opacity group-hover:opacity-100"
+              />
+            </button>
           </div>
           <div className="mt-0.5 text-[10.5px] text-[var(--text-faint)]">
             {formatRelativeTime(note.modifiedAt)} · {t('editor.words', { count: words })} ·{' '}

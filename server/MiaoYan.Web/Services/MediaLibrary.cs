@@ -114,7 +114,7 @@ public sealed partial class MediaLibrary
         extension = extension.ToLowerInvariant();
         var kind = KindFor(extension);
         var subdirectory = kind == "image" ? "i" : "files";
-        var stem = TitleHelper.ToFileStem(Path.GetFileNameWithoutExtension(original));
+        var stem = TitleHelper.ToAssetStem(Path.GetFileNameWithoutExtension(original));
         if (stem.Length == 0)
         {
             stem = kind;
@@ -291,7 +291,9 @@ public sealed partial class MediaLibrary
     {
         var info = new FileInfo(fullPath);
         var url = "/api/media/" + Uri.EscapeDataString(name);
-        var markdown = $"![]({SubdirectoryFor(name)}/{Uri.EscapeDataString(name)})";
+        // Names are sanitised by ToAssetStem, so the Markdown stays readable
+        // and still parses without percent-encoded whitespace.
+        var markdown = $"![]({SubdirectoryFor(name)}/{name})";
         return new IngestMediaDto(
             name,
             kind,

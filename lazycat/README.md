@@ -49,7 +49,7 @@ routes:
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t <your-dockerhub>/miaoyan-web:1.0.0 --push .
+  -t <your-dockerhub>/miaoyan-web:1.0.1 --push .
 ```
 
 镜像必须公网可拉取。`copy-image` 是在懒猫服务端执行 `docker pull`，本地镜像无法直接复制。
@@ -59,12 +59,12 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 > 否则 buildx 会报 `groupadd: GID '1000' already exists` 并中断。
 仓库里的 `.github/workflows/release-image.yml` 会在推送 `v*` tag 时构建
 `linux/amd64,linux/arm64` 并推到 GHCR；把 GHCR 包设为 public 后，再用
-`prepare-store-image.sh ghcr.io/<owner>/miaoyan-web:1.0.0` 复制到懒猫仓库。
+`prepare-store-image.sh ghcr.io/<owner>/miaoyan-web:1.0.1` 复制到懒猫仓库。
 
 ### 2. 复制到懒猫官方仓库
 
 ```bash
-./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:1.0.0
+./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:1.0.1
 ```
 
 脚本执行 `lzc-cli appstore copy-image`，从输出里取出
