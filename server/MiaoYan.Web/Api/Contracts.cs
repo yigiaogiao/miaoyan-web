@@ -20,7 +20,7 @@ public sealed record NoteSummaryDto(
     long Size,
     bool IsUntitled,
     bool Pinned,
-    // Papyra compatibility fields. Native list calls pass summary=1 and do not
+    // Ingest compatibility fields. Native list calls pass summary=1 and do not
     // pay for reading every body.
     string? Body = null,
     IReadOnlyList<string>? Tags = null,
@@ -131,11 +131,11 @@ public sealed record SearchHitDto(
     bool IsUntitled,
     double Score = 1);
 
-public sealed record PapyraCategoryDto(string Name, string? Color, int Count);
+public sealed record IngestCategoryDto(string Name, string? Color, int Count);
 
-public sealed record PapyraCategoryRequest(string? Name, string? Color);
+public sealed record IngestCategoryRequest(string? Name, string? Color);
 
-public sealed record PapyraMediaDto(
+public sealed record IngestMediaDto(
     string Filename,
     string Kind,
     string Mime,

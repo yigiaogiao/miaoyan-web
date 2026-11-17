@@ -11,7 +11,7 @@ services:
       MIAOYAN_STATE_DIR: /data/state
       # Set a password if this port is reachable from an untrusted network.
       # MIAOYAN_WEB_PASSWORD: change-me
-      # Optional Papyra-ingest compatibility key.
+      # Optional API key for miaoyan-ingest and other machine clients.
       # MIAOYAN_API_KEY: change-me
       MIAOYAN_MAX_UPLOAD_MB: "100"
     volumes:

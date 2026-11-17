@@ -6,7 +6,7 @@ using MiaoYan.Web.Api;
 namespace MiaoYan.Web.Services;
 
 /// <summary>
-/// Category registry used by Papyra clients. Tags themselves live in note
+/// Category registry used by Ingest clients. Tags themselves live in note
 /// frontmatter; this file only remembers a colour for tags that have no note
 /// yet. It is state, not data: deleting it loses colours but no notes.
 /// </summary>
@@ -21,22 +21,22 @@ public sealed class CategoryStore
         WriteIndented = true,
     };
 
-    public IReadOnlyList<PapyraCategoryDto> List(
+    public IReadOnlyList<IngestCategoryDto> List(
         VaultRuntime runtime,
         IReadOnlyDictionary<string, int> counts)
     {
         var registry = Load(runtime);
-        var result = new Dictionary<string, PapyraCategoryDto>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, IngestCategoryDto>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in registry.Values)
         {
-            result[item.Name] = new PapyraCategoryDto(item.Name, item.Color, counts.GetValueOrDefault(item.Name));
+            result[item.Name] = new IngestCategoryDto(item.Name, item.Color, counts.GetValueOrDefault(item.Name));
         }
 
         foreach (var (name, count) in counts)
         {
             if (!result.TryGetValue(name, out var existing))
             {
-                result[name] = new PapyraCategoryDto(name, null, count);
+                result[name] = new IngestCategoryDto(name, null, count);
             }
             else if (existing.Count != count)
             {
@@ -50,7 +50,7 @@ public sealed class CategoryStore
             .ToList();
     }
 
-    public PapyraCategoryDto Save(VaultRuntime runtime, PapyraCategoryRequest request, int count)
+    public IngestCategoryDto Save(VaultRuntime runtime, IngestCategoryRequest request, int count)
     {
         var name = (request.Name ?? string.Empty).Trim();
         if (name.Length is 0 or > 64 || name.Any(char.IsControl))
@@ -71,7 +71,7 @@ public sealed class CategoryStore
             Write(runtime, registry);
         }
 
-        return new PapyraCategoryDto(name, string.IsNullOrEmpty(color) ? null : color, count);
+        return new IngestCategoryDto(name, string.IsNullOrEmpty(color) ? null : color, count);
     }
 
     public void Delete(VaultRuntime runtime, string name)

@@ -39,8 +39,8 @@ benchmark met every target. Server suite 47/47. The real LazyCat container
 mount and `.lpk` install remain the first release-checklist items because no
 container runtime was available on this workstation.
 
-**M4 status (2026-11-05):** the Papyra-compatible subset used by
-`papyra-ingest` is implemented and was exercised with the real client against a
+**M4 status (2026-11-05):** the ingest-compatible subset used by
+`miaoyan-ingest` is implemented and was exercised with the real client against a
 local instance. Notes created by the API carry a small managed frontmatter
 (id/title/tags/color/kind/archived/created/updated) whose id survives native
 renames and moves; foreign frontmatter keys are preserved. `GET /api/notes`
@@ -50,7 +50,7 @@ returns full bodies (the SPA asks for `?summary=1`), `PUT` accepts
 (`uploaded:1`, then `reused:1` on republish) and repeated publishes reused the
 same note id. Server suite 32/32. Remaining differences: `archived` has no
 native UI yet (stored and returned only), API-key enforcement is M5, and
-Papyra's `DELETE /api/categories?fromNotes=true` tag-stripping variant is not
+The legacy client's `DELETE /api/categories?fromNotes=true` tag-stripping variant is not
 implemented (only the registry colour is removed).
 
 Reference sources: MiaoYan `README_CN.md`, `ARCHITECTURE.md`,
@@ -208,7 +208,7 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | Video support | Raw `<video>`/`<source>` HTML plays in preview (relative `i/`/`files/` paths resolve to the asset endpoint); uploaded video stays in `files/`; no ffmpeg audio extraction is needed because transcription reads the video directly | Done (M5) |
 | OCR images | Optional local `tesseract` command (`MIAOYAN_OCR_CMD`), off by default; Format/settings action inserts the text at the cursor | Done (M5; opt-in) |
 | Whisper transcription | Optional local command (`MIAOYAN_WHISPER_CMD`), audio or video, 10-minute timeout; the transcript is inserted at the cursor | Done (M5; opt-in) |
-| URL/text ingestion (Papyra ecosystem) | Not built in; `papyra-ingest` works through the compatibility API, including local media uploads and repeated publishes | Done (M4) |
+| URL/text ingestion (百宝箱) | Not built in; `miaoyan-ingest` works through the compatibility API, including local media uploads and repeated publishes | Done (M4) |
 
 ## 11. Import / export
 
@@ -222,7 +222,7 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | Export all | Sidebar download streams `MiaoYan-export-<date>.zip`; walks the vault skipping dot-directories, `node_modules` and symlinks, so app trash/conflicts and state are excluded | Done (M5) |
 | Swap library folder | Settings -> vault path is fixed by env in v1 (single library); import wizard supports merging | Partial (v1) |
 
-## 12. Papyra-compatible API
+## 12. Ingest-compatible API
 
 | Method | Path | Contract | Status |
 |---|---|---|---|
@@ -236,7 +236,7 @@ relevant Swift sources (`Business/Storage.swift`, `Business/Note.swift`,
 | GET | `/note/{id}` | SPA note route; resolves native and managed ids through `GET /api/notes/{id}` | Done (M4) |
 | Auth | `X-API-Key` | Constant-time check against `MIAOYAN_API_KEY` when configured; browsers can also log in with `MIAOYAN_WEB_PASSWORD`, which issues an HMAC session cookie (rate-limited, Origin-checked writes). Unset credentials keep LazyCat passwordless behind the signed user gateway | Done (M5) |
 
-Acceptance: real `papyra-ingest` publishes text and a local image, updates the
+Acceptance: real `miaoyan-ingest` publishes text and a local image, updates the
 same note on re-publish, shows the uploaded image, and does not create
 duplicate notes. The real-client run was done with a text source and a local
 PNG; X/Bilibili network sources were not exercised here because they depend on
@@ -353,7 +353,7 @@ App-store constraints that shape the implementation:
 - [x] Restore a deleted note and an old version.
 - [ ] Present a deck; exit; print to PDF.
 - [ ] Upload/paste an image and an audio file; play audio inline.
-- [ ] Run `papyra-ingest` twice on the same source; no duplicate note.
+- [ ] Run `miaoyan-ingest` twice on the same source; no duplicate note.
 - [x] 10k-note API targets: cold list 378 ms, warm list 22 ms, full-body list
       94 ms, warm 2-char search 20 ms, 4-char search 28 ms, note fetch 4 ms.
       Browser scroll smoothness on the same library remains a manual check.

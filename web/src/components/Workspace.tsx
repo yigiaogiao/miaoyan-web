@@ -47,8 +47,13 @@ export function Workspace() {
   const [trashOpen, setTrashOpen] = useState(false);
   const [unusedCount, setUnusedCount] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Three fixed columns plus a side-by-side editor need real width; below
+  // that the panels become overlays and the editor takes the whole pane.
   const [isNarrow, setIsNarrow] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 860px)').matches,
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1100px)').matches,
+  );
+  const [splitCapable, setSplitCapable] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1500px)').matches,
   );
 
   useEffect(() => {
@@ -57,18 +62,24 @@ export function Workspace() {
   }, [search]);
 
   useEffect(() => {
-    const query = window.matchMedia('(max-width: 860px)');
-    function onChange() {
-      setIsNarrow(query.matches);
-      if (query.matches) {
+    const narrow = window.matchMedia('(max-width: 1100px)');
+    const wide = window.matchMedia('(min-width: 1500px)');
+    function onNarrow() {
+      setIsNarrow(narrow.matches);
+      if (narrow.matches) {
         setPanels(false, false);
       }
     }
-    if (query.matches) {
-      setPanels(false, false);
+    function onWide() {
+      setSplitCapable(wide.matches);
     }
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
+    onNarrow();
+    narrow.addEventListener('change', onNarrow);
+    wide.addEventListener('change', onWide);
+    return () => {
+      narrow.removeEventListener('change', onNarrow);
+      wide.removeEventListener('change', onWide);
+    };
   }, [setPanels]);
 
   const projectsQuery = useQuery({
@@ -390,7 +401,8 @@ export function Workspace() {
   const sidebarVisible = sidebarOpen && !focusMode;
   const listVisible = listOpen && !focusMode;
   const overlayOpen = isNarrow && (sidebarVisible || listVisible);
-  const effectiveViewMode = isNarrow && viewMode === 'split' ? 'editor' : viewMode;
+  const effectiveViewMode =
+    (isNarrow || !splitCapable) && viewMode === 'split' ? 'editor' : viewMode;
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-[var(--bg)]">

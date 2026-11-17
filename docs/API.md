@@ -59,7 +59,7 @@
 原生 ID 由书库内相对路径哈希得到（`n` + 12 个十六进制字符）。重命名或移动会改变 ID；
 客户端应使用响应里的新 ID 跳转，并对旧 ID 的 404 做刷新。
 
-Papyra 兼容层写入的笔记会在 frontmatter 里带一个托管 `id`。该 id 是路径哈希之外的
+入库兼容层写入的笔记会在 frontmatter 里带一个托管 `id`。该 id 是路径哈希之外的
 **别名**：`GET/PUT /api/notes/{managed-id}` 在重命名/移动后仍然可用，而原生 ID 规则不变。
 普通导入笔记不会被改写，只有经过兼容 API 创建或更新的笔记才带托管元数据。
 
@@ -72,11 +72,11 @@ Papyra 兼容层写入的笔记会在 frontmatter 里带一个托管 `id`。该 
 | `POST` | `/api/projects` | `{name}`，空名自动生成“新建项目 N” |
 | `PATCH` | `/api/projects/{id}` | `{name}` 重命名；目标已存在返回 409 |
 | `DELETE` | `/api/projects/{id}` | 整个文件夹移入 `.miaoyan/trash`，返回 204 |
-| `GET` | `/api/notes?project=&q=` | 完整笔记列表（含 `body`，Papyra 兼容）；`project` 为空表示全部，`q` 匹配标题/正文；置顶笔记排在最前 |
+| `GET` | `/api/notes?project=&q=` | 完整笔记列表（含 `body`，入库兼容）；`project` 为空表示全部，`q` 匹配标题/正文；置顶笔记排在最前 |
 | `GET` | `/api/notes?summary=1` | 原生 SPA 使用的轻量列表，只含元数据和 `excerpt`，不读取正文 |
 | `POST` | `/api/notes` | `{projectId?, title?}`；空标题使用大写 UUID 文件名，显示为 “Untitled Note” |
 | `GET` | `/api/notes/{id}` | 正文 + 元数据 + `ETag` 响应头 |
-| `PUT` | `/api/notes/{id}` | 原生：`{content, etag}`；Papyra：`{title,tags,color,pinned,archived,body,kind}` + `If-Match`，缺失时创建；冲突返回 412 和冲突 JSON |
+| `PUT` | `/api/notes/{id}` | 原生：`{content, etag}`；入库客户端：`{title,tags,color,pinned,archived,body,kind}` + `If-Match`，缺失时创建；冲突返回 412 和冲突 JSON |
 | `PATCH` | `/api/notes/{id}` | `{title?, projectId?, pinned?}` 重命名/移动/置顶；目标存在返回 409；可能返回新 `id` |
 | `POST` | `/api/notes/{id}/duplicate` | 创建副本，返回 201 与新笔记；命名为 `Name Copy`、`Name Copy 2`… |
 | `DELETE` | `/api/notes/{id}` | 移入 `.miaoyan/trash`，返回 204 |
@@ -129,14 +129,14 @@ Papyra 兼容层写入的笔记会在 frontmatter 里带一个托管 `id`。该 
 ```
 
 `content` 是磁盘上的完整文本（原生编辑器使用，包含 frontmatter）；`body` 是去掉
-YAML frontmatter 后的正文（Papyra 客户端使用）。没有托管元数据的普通笔记，`body`
+YAML frontmatter 后的正文（入库客户端使用）。没有托管元数据的普通笔记，`body`
 就是完整正文，`managedId` 为 `null`。
 
 轻量列表项 `NoteSummaryDto` 与 `NoteDto` 相同，但没有 `content`、`etag`、`hasBom`，
-并以 `excerpt` 代替正文；完整列表额外返回 `body`、`tags` 等 Papyra 字段。
+并以 `excerpt` 代替正文；完整列表额外返回 `body`、`tags` 等入库字段。
 
 `ETag` 由内容哈希计算，同时放在响应头（带引号）和 JSON 的 `etag` 字段里。
-原生 `PUT` 优先读取 JSON 里的 `etag`；Papyra 兼容 `PUT` 读取标准的 `If-Match` 头。
+原生 `PUT` 优先读取 JSON 里的 `etag`；入库兼容 `PUT` 读取标准的 `If-Match` 头。
 
 保存冲突（412）返回：
 
@@ -261,9 +261,9 @@ data: {"kind":"note|project|trash","noteId":"n...","path":"工作/x.md","at":"..
 清理暂存）和 `.miaoyan-conflicts` 不会进入导出；需要完整备份时仍应复制目录（见
 [BACKUP.md](BACKUP.md)）。
 
-## Papyra 兼容 API（M4，已完成）
+## 入库兼容 API（M4，已完成）
 
-目标：现有 `papyra-ingest` 不改代码即可发布笔记。已完成真实客户端验证。
+目标：现有 `miaoyan-ingest` 不改代码即可发布笔记。已完成真实客户端验证。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -285,7 +285,7 @@ data: {"kind":"note|project|trash","noteId":"n...","path":"工作/x.md","at":"..
 - 缺失笔记的 `PUT` 视为创建，避免首次发布失败。
 - 上传文件名由服务端生成（`<stem>-<sha256[..12]><ext>`），客户端必须使用响应中的
   `filename`；相同内容重复上传返回已有文件。
-- `papyra-ingest` 的 `/api/media/<name>` 与 `![[name]]` 引用会重写为
+- `miaoyan-ingest` 的 `/api/media/<name>` 与 `![[name]]` 引用会重写为
   `i/<name>` / `files/<name>`，Markdown 预览及导出都能解析。
 - 托管 frontmatter 键为 `id/title/tags/color/kind/archived/created/updated`；
   其他 frontmatter 键逐行保留。
@@ -295,13 +295,13 @@ data: {"kind":"note|project|trash","noteId":"n...","path":"工作/x.md","at":"..
   `X-API-Key` 常量时间匹配；未设置时不校验。懒猫部署由网关注入的 `X-HC-User-ID`
   提供用户隔离，通常不设置该变量。
 - `archived=true` 会写入 frontmatter 并在 API 返回，但原生 UI 暂未提供归档视图。
-- 没有实现 Papyra 的完整分类管理（例如 `DELETE /api/categories?fromNotes=true`
+- 没有实现旧客户端的完整分类管理（例如 `DELETE /api/categories?fromNotes=true`
   同时移除笔记 tag）；当前 DELETE 只清除注册颜色。
 
 ## 约定
 
 - 时间：ISO 8601 UTC。
-- ID：原生接口使用路径哈希；Papyra 兼容层创建/更新的笔记另写托管 frontmatter `id`，
+- ID：原生接口使用路径哈希；入库兼容层创建/更新的笔记另写托管 frontmatter `id`，
   重命名/移动后仍可作为别名访问。普通导入笔记不会被写入任何托管字段。
 - 写操作原子替换：同目录临时文件 + `File.Move`。
 - 路径参数经过规范化和符号链接检查，任何逃逸出书库的路径返回 400。

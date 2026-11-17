@@ -1,19 +1,21 @@
 package: cloud.lazycat.app.miaoyanweb
-version: 0.1.1
-name: MiaoYan Web
+version: 1.0.0
+name: 妙言笔记
 description: A self-hosted Markdown knowledge base inspired by MiaoYan, with plain .md files on your own device.
 author: MiaoYan Web contributors
 license: MIT
 homepage: https://github.com/yigiaogiao/miaoyan-web
-# run_as (owner mapping for /lzcapp) and document.private need this baseline.
+# The custom image's entrypoint drops from root to uid 1000, and run_as
+# (owner mapping for /lzcapp) needs 1.6.0. On 1.5.x run_as is ignored, so
+# /lzcapp/documents would not be writable by the process. Require 1.6.0.
 min_os_version: 1.6.0
 
 locales:
   zh-CN:
-    name: 妙言 Web
+    name: 妙言笔记
     description: 自托管的 Markdown 知识库，笔记就是普通的 .md 文件，数据留在自己的微服上
   en-US:
-    name: MiaoYan Web
+    name: MiaoYan Notes
     description: A self-hosted Markdown knowledge base where every note is a plain .md file, stored on your own device
 
 permissions:

@@ -4,7 +4,6 @@ import {
   ArrowUpDown,
   Check,
   Copy,
-  FileText,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -85,9 +84,9 @@ export function NoteList({
     <section className="flex h-full w-full flex-col overflow-hidden border-r border-[var(--border)] bg-[var(--surface)]">
       <div className="space-y-2.5 px-3 pb-2 pt-3.5">
         <div className="flex items-center justify-between">
-          <h2 className="text-[13px] font-semibold text-[var(--text)]">
+          <h2 className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--text-faint)]">
             {t('notes.title')}
-            <span className="ml-1.5 font-normal text-[var(--text-faint)]">
+            <span className="ml-1.5 font-normal tracking-normal tabular-nums">
               {notes?.length ?? 0}
             </span>
           </h2>
@@ -127,7 +126,7 @@ export function NoteList({
               type="button"
               title={t('notes.new')}
               onClick={() => void onCreate()}
-              className="grid size-7 place-items-center rounded-lg bg-[var(--accent)] text-white shadow-sm hover:brightness-105"
+              className="grid size-7 place-items-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
             >
               <Plus size={16} />
             </button>
@@ -143,7 +142,7 @@ export function NoteList({
             value={search}
             onChange={(event) => onSearch(event.target.value)}
             placeholder={t('notes.search')}
-            className="w-full rounded-lg border border-transparent bg-[var(--surface-sunken)] py-1.5 pl-8 pr-7 text-[13px] outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]"
+            className="w-full rounded-full border border-[var(--border)] bg-transparent py-1.5 pl-8 pr-7 text-[13px] outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)] focus:bg-[var(--surface-raised)]"
           />
           {search && (
             <button
@@ -185,7 +184,7 @@ export function NoteList({
                   key={note.id}
                   data-index={item.index}
                   ref={virtualizer.measureElement}
-                  className="absolute inset-x-0 top-0 px-1 py-1"
+                  className="absolute inset-x-0 top-0 px-1.5"
                   style={{ transform: `translateY(${item.start}px)` }}
                 >
                   <div
@@ -196,6 +195,17 @@ export function NoteList({
                     onDragStart={(event) => {
                       event.dataTransfer.setData('application/x-miaoyan-note', note.id);
                       event.dataTransfer.effectAllowed = 'move';
+                      // A compact chip anchored at the cursor's top-left keeps
+                      // the folder rows under the pointer visible; the default
+                      // snapshot is the whole card and hides them.
+                      const ghost = document.createElement('div');
+                      ghost.className = 'note-drag-ghost';
+                      const label = document.createElement('span');
+                      label.textContent = note.title;
+                      ghost.append(label);
+                      document.body.append(ghost);
+                      event.dataTransfer.setDragImage(ghost, 10, 12);
+                      requestAnimationFrame(() => requestAnimationFrame(() => ghost.remove()));
                     }}
                     onClick={() => onOpen(note.id)}
                     onKeyDown={(event) => {
@@ -204,43 +214,35 @@ export function NoteList({
                         onOpen(note.id);
                       }
                     }}
-                    className={`group relative cursor-pointer rounded-xl border px-3 py-2.5 outline-none transition-colors ${
+                    aria-current={active ? 'true' : undefined}
+                    className={`group relative cursor-pointer rounded-[10px] border-b px-3 py-2.5 outline-none transition-colors ${
                       active
-                        ? 'border-[var(--accent-border)] bg-[var(--accent-soft)]'
-                        : 'border-transparent hover:bg-[var(--surface-hover)]'
+                        ? 'border-transparent bg-[var(--selection-row)]'
+                        : 'border-[var(--border)] hover:bg-[var(--surface-hover)]'
                     }`}
                   >
-                    <div className="flex items-start gap-2">
-                      <span
-                        className={`mt-0.5 flex size-3.5 shrink-0 items-center justify-center ${
-                          active ? 'text-[var(--accent-strong)]' : 'text-[var(--text-faint)]'
+                    <div className="min-w-0">
+                      <div
+                        className={`flex items-center gap-1 text-[14px] leading-5 ${
+                          active ? 'font-semibold' : 'font-medium'
                         }`}
                       >
-                        {active ? (
-                          <span className="block size-1.5 rounded-full bg-[var(--accent)]" />
-                        ) : (
-                          <FileText size={13} />
+                        {note.pinned && (
+                          <Pin size={11} className="shrink-0 text-[var(--accent)]" fill="currentColor" />
                         )}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 text-[13.5px] font-medium leading-5">
-                          {note.pinned && (
-                            <Pin size={11} className="shrink-0 text-[var(--accent)]" fill="currentColor" />
-                          )}
-                          <span className="truncate">{note.title}</span>
-                        </div>
-                        <p className="mt-0.5 line-clamp-2 text-[12px] leading-[1.5] text-[var(--text-muted)]">
-                          {note.excerpt || t('notes.blank')}
-                        </p>
-                        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--text-faint)]">
-                          <span>{formatRelativeTime(note.modifiedAt)}</span>
-                          {note.projectId !== 'root' && note.projectName && (
-                            <>
-                              <span>·</span>
-                              <span className="truncate">{note.projectName}</span>
-                            </>
-                          )}
-                        </div>
+                        <span className="truncate">{note.title}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[12.5px] leading-[1.55] text-[var(--text-muted)]">
+                        {note.excerpt || t('notes.blank')}
+                      </p>
+                      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--text-faint)]">
+                        <span>{formatRelativeTime(note.modifiedAt)}</span>
+                        {note.projectId !== 'root' && note.projectName && (
+                          <>
+                            <span>·</span>
+                            <span className="truncate">{note.projectName}</span>
+                          </>
+                        )}
                       </div>
                     </div>
 

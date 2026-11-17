@@ -17,8 +17,8 @@ Where a native macOS behaviour cannot exist in a browser, the user must still be
 able to complete the same task; every such substitution is recorded in
 `COMPATIBILITY.md` with the reason and the Web alternative.
 
-This is an independent project. It does **not** modify MiaoYan or Papyra, and it
-does not copy Papyra source code. Architecture and API shapes are studied as
+This is an independent project. It does **not** modify MiaoYan and does not
+copy upstream source code. Architecture and API shapes are studied as
 references; the implementation is new. License: **MIT** (see `LICENSE`).
 
 ### In scope (v1)
@@ -36,14 +36,14 @@ references; the implementation is new. License: **MIT** (see `LICENSE`).
 - `i/` images and `files/` attachments; image paste/drag; audio playback.
 - Import an existing MiaoYan library, export a note / deck / whole vault.
 - Media ingest for images, text, audio; video keeps audio + transcript only.
-- Papyra-compatible API subset so the existing `papyra-ingest` works unchanged.
+- ingest-compatible API subset so the existing `miaoyan-ingest` works unchanged.
 - LazyCat single-container deployment (`.lpk`), amd64 + arm64.
 
 ### Explicitly out of scope (v1)
 
 Realtime collaboration, comments, sharing links, multi-tenancy, native macOS
 features (global hotkey, Finder reveal, iCloud coordination), crawlers, full
-Papyra auth (passkey / 2FA / registration). v1 is **single user, single
+upstream auth (passkey / 2FA / registration). v1 is **single user, single
 library**, with LazyCat gateway isolation or an optional password.
 
 ## 2. Architecture
@@ -52,9 +52,9 @@ library**, with LazyCat gateway isolation or an optional password.
 ┌───────────────────────────── one container ─────────────────────────────┐
 │  Kestrel (:5080)                                                        │
 │  ├─ /                 SPA (React build in wwwroot, history fallback)     │
-│  ├─ /api/*            Web API + Papyra-compatible API                    │
+│  ├─ /api/*            Web API + ingest-compatible API                    │
 │  ├─ /api/events       Server-Sent Events (filesystem/index changes)      │
-│  ├─ /api/media/*      API media library (Papyra-compatible)              │
+│  ├─ /api/media/*      API media library (ingest-compatible)              │
 │  ├─ /api/notes/*/assets/*  note-relative i/ and files/ serving           │
 │  ├─ /note/{id}        SPA note route (compatibility)                    │
 │  └─ /healthz          health check                                       │
@@ -189,7 +189,7 @@ notes(
   body_loaded INTEGER NOT NULL DEFAULT 0
 );
 links(src_id TEXT NOT NULL, target_title TEXT NOT NULL, target_id TEXT NULL, ordinal INT);
-categories(name TEXT PRIMARY KEY, created_at TEXT);   -- Papyra tag registry
+categories(name TEXT PRIMARY KEY, created_at TEXT);   -- ingest tag registry
 media(hash TEXT PRIMARY KEY, filename TEXT NOT NULL, rel_path TEXT NOT NULL,
       mime TEXT, size INTEGER, created_at TEXT);
 versions(note_id TEXT, version_id TEXT, rel_path TEXT, size INTEGER,
@@ -243,7 +243,7 @@ ETags are strong: `"sha256:<hex>"`. `If-Match: *` is accepted. A stale
 `If-Match` returns **412** with `{error:"precondition-failed", currentEtag,
 currentBody, conflictPath}`; the Web client then shows the conflict dialog.
 
-### 5.2 Papyra-compatible subset (must work unchanged with `papyra-ingest`)
+### 5.2 Ingest-compatible subset (must work unchanged with `miaoyan-ingest`)
 
 | Method | Path | Behaviour |
 |---|---|---|
@@ -260,8 +260,8 @@ Media normalisation on write:
 
 - `/api/media/<name>` and `![[<name>]]` are resolved to real files.
 - Images become `/i/<name>`; other files become `/files/<name>`.
-- Managed ingest markers (`rendered.py` zero-width START/END and the legacy
-  `<!-- papyra-ingest:start -->`) are preserved verbatim; only media URLs inside
+- Managed ingest markers (`render.py` zero-width START/END and the legacy HTML
+  markers) are preserved verbatim; only media URLs inside
   the note are normalised, and frontmatter is managed separately.
 - Repeated publishing updates the same note via its ID and preserves user text
   outside the managed block.
@@ -360,7 +360,7 @@ choice.
   - audio: stored in `files/`, inline player, optional transcription.
   - video: never stored; with `ffmpeg` present extract a mono m4a to `files/`,
     optional transcript. Without ffmpeg, reject with a clear message.
-  - text/URL ingestion stays in `papyra-ingest`; we only provide the API.
+  - text/URL ingestion stays in `miaoyan-ingest`; we only provide the API.
 - Optional OCR/Whisper: off by default, enabled by env command; runs as a
   background job, writes into a managed block or a sidecar `.txt` next to the
   media. Failures never block note saving.
@@ -432,7 +432,7 @@ while typing (block-level updates), image `loading=lazy`.
   builder.
 - **Integration (.NET, WebApplicationFactory + temp vault)**: scan, CRUD,
   If-Match 412 + conflict file, rename/move, trash/restore, media upload/dedupe,
-  Papyra API shapes, search, versions.
+  Ingest API shapes, search, versions.
 - **Frontend unit (Vitest)**: wikilink rendering, PPT splitter, frontmatter
   hiding, relative time, slug helpers.
 - **E2E (Playwright)**: create/edit/autosave, external change, search, PPT,
@@ -532,16 +532,16 @@ PPT source HTML is sanitised, so authored inline `style` survives but scripts
 and event handlers do not. Word count/reading time and the smart typography
 command remain M5 polish.
 
-### M4 — Papyra compatibility and ingest — **done 2026-11-05**
+### M4 — Ingest compatibility — **done 2026-11-05**
 
 Implement the API subset, media normalisation, ETag conflict retry. Acceptance:
-run real `papyra-ingest` with `PAPYRA_BASE_URL`/`PAPYRA_API_KEY` against X and
+run real `miaoyan-ingest` with `MIAOYAN_BASE_URL`/`MIAOYAN_API_KEY` against X and
 Bilibili sources; create and update the same note; images/audio display;
 re-publishing does not duplicate notes.
 
-Landed: `GET /api/notes` now returns Papyra's full-note shape (the SPA opts into
+Landed: `GET /api/notes` now returns the ingest client's full-note shape (the SPA opts into
 the cheap list with `?summary=1`); `GET /api/notes/{id}` accepts either the
-native path-hash id or the managed id in frontmatter; `PUT` accepts the Papyra
+native path-hash id or the managed id in frontmatter; `PUT` accepts the ingest
 payload `{title,tags,color,pinned,archived,body,kind}`, honours `If-Match`,
 creates missing notes, and keeps foreign frontmatter keys. Managed notes get an
 `id` alias, so a native rename/move does not break the next machine publish.
@@ -551,10 +551,10 @@ Root media upload (`POST /api/media/upload`) is content-addressed, serves
 library root. `categories.json` (state, disposable) backs
 `GET/POST/DELETE /api/categories`, unioned with tags parsed from notes.
 
-Verification: server suite 32/32 (26 previous + 6 Papyra tests: create/list,
+Verification: server suite 32/32 (26 previous + 6 ingest tests: create/list,
 `If-Match` conflict, rename/move alias stability, media dedupe/HEAD/GET and
 traversal rejection, categories, foreign-frontmatter preservation). Typecheck
-and production build pass. Real `papyra-ingest` run against a local instance:
+and production build pass. Real `miaoyan-ingest` run against a local instance:
 text ingest created `text-acd4…` with a frontmatter id, an updated local image
 uploaded to `i/<name>-<hash>.jpg` (`uploaded:1`), a second publish reused the
 same file id and media (`reused:1`), and none of the republishes created a
@@ -597,10 +597,10 @@ on this workstation and are recorded in `COMPATIBILITY.md`.
 
 | Date | Decision | Why |
 |---|---|---|
-| 2026-11-05 | New implementation, MIT license | Only architecture/API shapes referenced; no Papyra/MiaoYan code copied |
+| 2026-11-05 | New implementation, MIT license | Only architecture/API shapes referenced; no upstream code copied |
 | 2026-11-05 | Filesystem is authoritative; SQLite index disposable | Matches MiaoYan's "notes are plain files" promise |
 | 2026-11-05 | Imported notes are never rewritten; M1 IDs are path hashes and no managed frontmatter is written | The filesystem stays the user's; path hashes avoid mutating imported files. Frontmatter `id` is revisited only if M4 ingest needs stable IDs across moves |
-| 2026-11-05 | Save conflicts use the body `etag` (plus response `ETag` header) and return 412 | One contract works for the SPA and for `papyra-ingest`, which retries on 409/412/428; `If-Match` is reserved for M4 |
+| 2026-11-05 | Save conflicts use the body `etag` (plus response `ETag` header) and return 412 | One contract works for the SPA and for `miaoyan-ingest`, which retries on 409/412/428; `If-Match` is reserved for M4 |
 | 2026-11-05 | Deletion goes to `<vault>/.miaoyan/trash`, not the OS trash | Web/LazyCat containers have no host trash; in-app restore is the equivalent task |
 | 2026-11-05 | Self-write suppression window is 1 s | Longer windows swallowed external edits made right after an in-app save |
 | 2026-11-05 | PlantUML local jar only; no public server | Note content privacy |
@@ -621,11 +621,11 @@ on this workstation and are recorded in `COMPATIBILITY.md`.
 | 2026-11-05 | Scroll sync writes/reads `data-source-line` anchors and uses a short source guard | Cheap, works with token maps, and stops the two panes from echoing each other |
 | 2026-11-05 | Markmap dark mode is driven by a `.markmap-dark` ancestor class | markmap-view selects its palette from that class, not from CSS variables |
 | 2026-11-05 | The `/` menu is a CodeMirror autocompletion source, not a custom popup | Keeps keyboard semantics (arrows, Enter, Escape) identical across desktop and mobile |
-| 2026-11-05 | Managed frontmatter is written only when the Papyra API creates/updates a note; imported and native notes stay untouched | Machine clients need an id that survives renames; ordinary Markdown files keep MiaoYan's "plain files" promise |
+| 2026-11-05 | Managed frontmatter is written only when the Ingest API creates/updates a note; imported and native notes stay untouched | Machine clients need an id that survives renames; ordinary Markdown files keep MiaoYan's "plain files" promise |
 | 2026-11-05 | The managed id is an alias in the snapshot; the path hash remains the primary id | The SPA contract and rename behaviour stay unchanged, while `GET/PUT /api/notes/<managed-id>` works after a move |
-| 2026-11-05 | Default `GET /api/notes` returns full bodies; the SPA asks for `?summary=1` | Papyra's list contract includes bodies; the native UI should not pay that cost on every library refresh |
+| 2026-11-05 | Default `GET /api/notes` returns full bodies; the SPA asks for `?summary=1` | The ingest client's list contract includes bodies; the native UI should not pay that cost on every library refresh |
 | 2026-11-05 | Root media is content-addressed (`<stem>-<sha256[..12]><ext>`) and looked up by hash | Re-publishing an article must not upload the same picture again; the hash also makes the write idempotent |
-| 2026-11-05 | Categories live in disposable `state/categories.json`, unioned with note tags | Papyra clients can register a tag before its first note; losing the file only loses colours |
+| 2026-11-05 | Categories live in disposable `state/categories.json`, unioned with note tags | Machine clients can register a tag before its first note; losing the file only loses colours |
 | 2026-11-05 | `/api/media` serves an allowlist of image/audio/video/document extensions and sets CSP `sandbox` | Uploaded HTML/SVG must not become a scripting origin inside the app |
 | 2026-11-05 | API-key enforcement is M5, not M4 | LazyCat's signed `X-HC-User-ID` gateway already isolates users; the compatibility endpoints must first be validated end to end. M5 adds a constant-time check for standalone deployments |
 | 2026-11-05 | Auth is enabled only when `MIAOYAN_WEB_PASSWORD` or `MIAOYAN_API_KEY` is set; LazyCat stays passwordless | The store requires entry through the gateway; standalone deployments opt into protection explicitly, so an upgrade cannot lock a working LazyCat install out |

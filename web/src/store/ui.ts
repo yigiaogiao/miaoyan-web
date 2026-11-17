@@ -39,6 +39,24 @@ interface UiState {
   requestCreateProject: () => void;
 }
 
+/** The subset written to localStorage. */
+type PersistedUiState = Pick<
+  UiState,
+  | 'viewMode'
+  | 'theme'
+  | 'language'
+  | 'sort'
+  | 'sidebarOpen'
+  | 'listOpen'
+  | 'sidebarWidth'
+  | 'listWidth'
+  | 'focusMode'
+  | 'typewriter'
+  | 'editorFontSize'
+  | 'editorLineHeight'
+  | 'editorWidth'
+>;
+
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
@@ -49,13 +67,13 @@ export const useUiStore = create<UiState>()(
       sort: 'modified',
       sidebarOpen: true,
       listOpen: true,
-      sidebarWidth: 218,
-      listWidth: 294,
+      sidebarWidth: 232,
+      listWidth: 326,
       focusMode: false,
       typewriter: false,
-      editorFontSize: 15,
-      editorLineHeight: 1.75,
-      editorWidth: 860,
+      editorFontSize: 17,
+      editorLineHeight: 1.7,
+      editorWidth: 720,
       projectCreateRequest: 0,
       setProject: (id) => set({ selectedProjectId: id }),
       setViewMode: (viewMode) => set({ viewMode }),
@@ -78,6 +96,39 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: 'miaoyan-ui',
+      // 0.1.6 moved the editor from a monospace code look to a reading
+      // measure. Only rewrite the sliders that still hold the old defaults;
+      // anything the reader tuned by hand stays put.
+      version: 3,
+      migrate: (persisted) => {
+        const state = persisted as PersistedUiState;
+        const next = { ...state };
+        if (
+          state.editorFontSize === 15 &&
+          state.editorLineHeight === 1.75 &&
+          state.editorWidth === 860
+        ) {
+          next.editorFontSize = 16;
+          next.editorLineHeight = 1.7;
+          next.editorWidth = 720;
+        }
+        // The WenKai reading face sits a touch smaller than the old Songti
+        // stack, so the untouched default moves from 16px to 17px.
+        if (
+          state.editorFontSize === 16 &&
+          state.editorLineHeight === 1.7 &&
+          state.editorWidth === 720
+        ) {
+          next.editorFontSize = 17;
+        }
+        if (state.sidebarWidth === 218) {
+          next.sidebarWidth = 232;
+        }
+        if (state.listWidth === 294) {
+          next.listWidth = 326;
+        }
+        return next;
+      },
       partialize: (state) => ({
         viewMode: state.viewMode,
         theme: state.theme,

@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useUiStore, type Language } from '../store/ui';
 
 const zh = {
-  brand: '妙言 Web',
+  brand: '妙言笔记',
 
   'common.confirm': '确定',
   'common.cancel': '取消',
@@ -300,7 +300,7 @@ const zh = {
 export type MessageKey = keyof typeof zh;
 
 const en: Record<MessageKey, string> = {
-  brand: 'MiaoYan Web',
+  brand: 'MiaoYan Notes',
 
   'common.confirm': 'Confirm',
   'common.cancel': 'Cancel',

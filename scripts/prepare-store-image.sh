@@ -3,8 +3,8 @@
 # LazyCat manifest at the returned reference.
 #
 #   docker buildx build --platform linux/amd64,linux/arm64 \
-#     -t <your-dockerhub>/miaoyan-web:0.1.0 --push .
-#   ./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:0.1.0
+#     -t <your-dockerhub>/miaoyan-web:1.0.0 --push .
+#   ./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:1.0.0
 #
 # The image must be public: copy-image runs `docker pull` on LazyCat's servers.
 set -euo pipefail

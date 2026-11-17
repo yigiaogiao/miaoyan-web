@@ -118,7 +118,7 @@ public static class VaultEndpoints
             var summariesOnly = summary is "1" or "true";
             return Results.Ok(summariesOnly
                 ? service.ListNotes(runtime, project, q)
-                : service.ListPapyraNotes(runtime, project, q));
+                : service.ListIngestNotes(runtime, project, q));
         });
 
         api.MapPost("/notes", (CreateNoteRequest? request, HttpContext context, VaultRegistry vaults, VaultWatcher watcher, VaultService service) =>
@@ -189,7 +189,7 @@ public static class VaultEndpoints
             }
 
             var result = request.Body is not null
-                ? await service.SavePapyraNoteAsync(
+                ? await service.SaveIngestNoteAsync(
                     runtime,
                     id,
                     request,
@@ -339,13 +339,13 @@ public static class VaultEndpoints
             return Results.Ok(categories.List(runtime, CountTags(service, runtime)));
         });
 
-        api.MapPost("/categories", (PapyraCategoryRequest? request, HttpContext context, VaultRegistry vaults, VaultService service, CategoryStore categories) =>
+        api.MapPost("/categories", (IngestCategoryRequest? request, HttpContext context, VaultRegistry vaults, VaultService service, CategoryStore categories) =>
         {
             var runtime = vaults.Resolve(context);
             var name = (request?.Name ?? string.Empty).Trim();
             var counts = CountTags(service, runtime);
             var count = counts.GetValueOrDefault(name);
-            return Results.Ok(categories.Save(runtime, request ?? new PapyraCategoryRequest(null, null), count));
+            return Results.Ok(categories.Save(runtime, request ?? new IngestCategoryRequest(null, null), count));
         });
 
         api.MapDelete("/categories/{name}", (string name, HttpContext context, VaultRegistry vaults, CategoryStore categories) =>
@@ -404,7 +404,7 @@ public static class VaultEndpoints
     private static Dictionary<string, int> CountTags(VaultService service, VaultRuntime runtime)
     {
         var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var note in service.ListPapyraNotes(runtime, null, null))
+        foreach (var note in service.ListIngestNotes(runtime, null, null))
         {
             foreach (var tag in note.Tags ?? [])
             {

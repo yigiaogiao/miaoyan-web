@@ -7,8 +7,14 @@
 # no JRE; the full Dockerfile image keeps PlantUML and ffmpeg.
 application:
   subdomain: miaoyan
+  # Keep the sideload variant in the same isolation mode as the store build:
+  # one container per user, so document.private exposes only that user's
+  # /lzcapp/documents/<uid> subtree.
+  multi_instance: true
   routes:
-    - /=http://miaoyan.cloud.lazycat.app.miaoyanweb.lzcapp:5080
+    # Route to the service by its name; the fully-qualified form is not the
+    # convention LazyCat uses for in-app backends (see the official templates).
+    - /=http://miaoyan:5080/
   injects:
     - id: miaoyan-revalidate-html
       auth_required: false
@@ -28,8 +34,9 @@ services:
   miaoyan:
     image: mcr.microsoft.com/dotnet/aspnet:10.0
     entrypoint: /usr/bin/dotnet
-    command:
-      - /lzcapp/pkg/content/MiaoYan.Web.dll
+    # command is a string, not a list (manifest schema: *string). A YAML list
+    # here is rejected at install time.
+    command: /lzcapp/pkg/content/MiaoYan.Web.dll
     run_as: "1000:1000"
     environment:
       - ASPNETCORE_URLS=http://+:5080

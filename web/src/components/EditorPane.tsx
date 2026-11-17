@@ -84,6 +84,8 @@ const THEME_ITEMS: { value: ThemeMode; key: string; icon: ReactNode }[] = [
   { value: 'dark', key: 'theme.dark', icon: <Moon size={14} /> },
 ];
 
+const FRONTMATTER_BLOCK = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
+
 function countWords(content: string): number {
   const withoutFrontmatter = content.replace(/^---\n[\s\S]*?\n---\n?/, '');
   const cjk = (withoutFrontmatter.match(/[㐀-鿿豈-﫿]/g) ?? []).length;
@@ -181,11 +183,17 @@ export function EditorPane({
   const loadedIdRef = useRef<string | null>(null);
   const deletingRef = useRef(false);
   const noteRef = useRef<Note | null>(null);
+  const frontmatterRef = useRef<string | null>(null);
   noteRef.current = note ?? null;
 
   const handleChange = useCallback((value: string) => {
-    contentRef.current = value;
-    setContent(value);
+    // The editor hides the managed frontmatter, so select-all + delete would
+    // silently drop id/created/…. Keep the block on save; it is not prose.
+    const frontmatter = frontmatterRef.current;
+    const next =
+      frontmatter && !value.startsWith('---') ? frontmatter + value : value;
+    contentRef.current = next;
+    setContent(next);
   }, []);
 
   const releaseSync = useCallback(() => {
@@ -220,6 +228,7 @@ export function EditorPane({
   );
 
   const adopt = useCallback((value: Note) => {
+    frontmatterRef.current = value.content.match(FRONTMATTER_BLOCK)?.[0] ?? null;
     contentRef.current = value.content;
     savedContentRef.current = value.content;
     etagRef.current = value.etag;
@@ -628,13 +637,13 @@ export function EditorPane({
 
   return (
     <section className="relative flex h-full min-w-0 flex-1 flex-col bg-[var(--surface)]">
-      <header className="flex h-[52px] shrink-0 items-center gap-1.5 border-b border-[var(--border)] px-3">
+      <header className="flex h-[52px] shrink-0 items-center gap-1 border-b border-[var(--border)] px-4">
         {!sidebarOpen && (
           <button
             type="button"
             title={t('editor.showSidebar')}
             onClick={toggleSidebar}
-            className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
+            className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
           >
             <PanelLeft size={16} />
           </button>
@@ -644,7 +653,7 @@ export function EditorPane({
             type="button"
             title={t('editor.showList')}
             onClick={toggleList}
-            className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
+            className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
           >
             <List size={16} />
           </button>
@@ -663,12 +672,14 @@ export function EditorPane({
         )}
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-[13px] text-[var(--text-faint)]">
+          <div className="flex items-baseline gap-1.5 text-[12px] text-[var(--text-faint)]">
             {note.projectName && <span className="truncate">{note.projectName}</span>}
-            {note.projectName && <span>/</span>}
-            <span className="truncate font-medium text-[var(--text)]">{note.title}</span>
+            {note.projectName && <span className="opacity-60">/</span>}
+            <span className="truncate text-[13px] font-semibold tracking-tight text-[var(--text)]">
+              {note.title}
+            </span>
           </div>
-          <div className="text-[11px] text-[var(--text-faint)]">
+          <div className="mt-0.5 text-[10.5px] text-[var(--text-faint)]">
             {formatRelativeTime(note.modifiedAt)} · {t('editor.words', { count: words })} ·{' '}
             {t('editor.readingTime', { minutes: readingMinutes })}
             {uploading > 0 && ` · ${tn('editor.uploading', uploading)}`}
@@ -701,7 +712,7 @@ export function EditorPane({
             onClick={() => onViewMode('editor')}
             className={`rounded-md p-1.5 ${
               viewMode === 'editor'
-                ? 'bg-[var(--surface-raised)] text-[var(--accent-strong)] shadow-sm'
+                ? 'bg-[var(--surface-raised)] text-[var(--text)] shadow-sm'
                 : 'text-[var(--text-faint)] hover:text-[var(--text)]'
             }`}
           >
@@ -711,9 +722,9 @@ export function EditorPane({
             type="button"
             title={t('editor.modeSplit')}
             onClick={() => onViewMode('split')}
-            className={`hidden rounded-md p-1.5 sm:block ${
+            className={`hidden rounded-md p-1.5 min-[1500px]:block ${
               viewMode === 'split'
-                ? 'bg-[var(--surface-raised)] text-[var(--accent-strong)] shadow-sm'
+                ? 'bg-[var(--surface-raised)] text-[var(--text)] shadow-sm'
                 : 'text-[var(--text-faint)] hover:text-[var(--text)]'
             }`}
           >
@@ -725,7 +736,7 @@ export function EditorPane({
             onClick={() => onViewMode('preview')}
             className={`rounded-md p-1.5 ${
               viewMode === 'preview'
-                ? 'bg-[var(--surface-raised)] text-[var(--accent-strong)] shadow-sm'
+                ? 'bg-[var(--surface-raised)] text-[var(--text)] shadow-sm'
                 : 'text-[var(--text-faint)] hover:text-[var(--text)]'
             }`}
           >
@@ -743,7 +754,7 @@ export function EditorPane({
           className={`rounded-lg p-1.5 ${
             outlineOpen
               ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
-              : 'text-[var(--text-muted)] hover:bg-[var(--accent-soft)]'
+              : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'
           }`}
         >
           <ListTree size={15} />
@@ -756,7 +767,7 @@ export function EditorPane({
           className={`rounded-lg p-1.5 ${
             settingsOpen
               ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
-              : 'text-[var(--text-muted)] hover:bg-[var(--accent-soft)]'
+              : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'
           }`}
         >
           <Settings2 size={15} />
@@ -766,7 +777,7 @@ export function EditorPane({
           type="button"
           title={t('editor.presentation')}
           onClick={() => setPptOpen(true)}
-          className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
+          className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
         >
           <Presentation size={15} />
         </button>
@@ -781,7 +792,7 @@ export function EditorPane({
           className={`flex items-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] ${
             showBacklinks
               ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
-              : 'text-[var(--text-muted)] hover:bg-[var(--accent-soft)]'
+              : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)]'
           }`}
         >
           <Link2 size={15} />
@@ -795,7 +806,7 @@ export function EditorPane({
               title={t('editor.theme', {
                 name: t(THEME_ITEMS.find((item) => item.value === theme)?.key ?? 'theme.system'),
               })}
-              className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
+              className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
             >
               {theme === 'dark' ? <Moon size={15} /> : theme === 'light' ? <Sun size={15} /> : <Monitor size={15} />}
             </button>
@@ -826,7 +837,7 @@ export function EditorPane({
             <button
               type="button"
               title={t('editor.more')}
-              className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
+              className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
             >
               <MoreHorizontal size={16} />
             </button>
@@ -1241,7 +1252,7 @@ export function EditorPane({
         {viewMode !== 'editor' && (
           <div
             style={{ flex: viewMode === 'split' ? '1 1 50%' : '1 1 100%' }}
-            className="min-w-0 bg-[var(--bg)]"
+            className="min-w-0 bg-[var(--reading-surface)]"
           >
             <MarkdownPreview
               ref={previewRef}

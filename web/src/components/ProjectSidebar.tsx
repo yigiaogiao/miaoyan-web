@@ -1,9 +1,21 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Download, Eraser, Feather, FolderPlus, Layers, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import {
+  Download,
+  Eraser,
+  Folder,
+  FolderPlus,
+  Inbox,
+  Layers,
+  MoreHorizontal,
+  MoveRight,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import type { Project } from '../api/types';
 import { useI18n } from '../lib/i18n';
 import { useUiStore } from '../store/ui';
+import { AppIcon } from './AppIcon';
 import { ConfirmDialog, PromptDialog } from './Dialogs';
 
 const NOTE_DRAG_TYPE = 'application/x-miaoyan-note';
@@ -27,10 +39,29 @@ interface RowProps {
   onSelect: () => void;
   onDropNote?: (noteId: string) => void;
   actions?: ReactNode;
+  dragging?: boolean;
 }
 
-function Row({ id, name, count, active, icon, onSelect, onDropNote, actions }: RowProps) {
+function Row({
+  id,
+  name,
+  count,
+  active,
+  icon,
+  onSelect,
+  onDropNote,
+  actions,
+  dragging = false,
+}: RowProps) {
   const [dragOver, setDragOver] = useState(false);
+
+  // Cancelling a drag (Esc, drop outside) fires no dragleave on the row, so
+  // clear the highlight when the global drag state ends.
+  useEffect(() => {
+    if (!dragging) {
+      setDragOver(false);
+    }
+  }, [dragging]);
 
   function onDragOver(event: DragEvent<HTMLDivElement>) {
     if (!onDropNote || !event.dataTransfer.types.includes(NOTE_DRAG_TYPE)) {
@@ -66,11 +97,15 @@ function Row({ id, name, count, active, icon, onSelect, onDropNote, actions }: R
       onDragEnter={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      className={`group flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-shadow ${
-        active
-          ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent-strong)]'
-          : 'text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]'
-      } ${dragOver ? 'ring-2 ring-inset ring-[var(--accent)]' : ''}`}
+      className={`group flex items-center gap-2 rounded-lg px-2.5 py-[7px] text-[13px] transition-colors ${
+        dragOver
+          ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent-strong)] ring-2 ring-inset ring-[var(--accent)]'
+          : active
+            ? 'bg-[var(--selection-row)] font-medium text-[var(--text)]'
+            : dragging && onDropNote
+              ? 'text-[var(--text)] outline outline-1 -outline-offset-1 outline-dashed outline-[var(--border-strong)]'
+              : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]'
+      }`}
     >
       <button
         type="button"
@@ -81,10 +116,14 @@ function Row({ id, name, count, active, icon, onSelect, onDropNote, actions }: R
         <span className="truncate">{name}</span>
       </button>
       {actions}
-      {count !== undefined && (
-        <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-faint)] group-hover:hidden">
-          {count > 0 ? count : ''}
-        </span>
+      {dragOver ? (
+        <MoveRight size={13} className="shrink-0 text-[var(--accent-strong)]" aria-hidden />
+      ) : (
+        count !== undefined && (
+          <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-faint)] group-hover:hidden">
+            {count > 0 ? count : ''}
+          </span>
+        )
       )}
     </div>
   );
@@ -105,12 +144,32 @@ export function ProjectSidebar({
   const projectCreateRequest = useUiStore((state) => state.projectCreateRequest);
 
   const [creating, setCreating] = useState(false);
+  const [noteDragActive, setNoteDragActive] = useState(false);
 
   useEffect(() => {
     if (projectCreateRequest > 0) {
       setCreating(true);
     }
   }, [projectCreateRequest]);
+
+  // Highlight every droppable folder while a note is being dragged, so the
+  // valid targets are visible before the pointer reaches them.
+  useEffect(() => {
+    function onDragStart(event: globalThis.DragEvent) {
+      if (event.dataTransfer?.types.includes(NOTE_DRAG_TYPE)) {
+        setNoteDragActive(true);
+      }
+    }
+    const stop = () => setNoteDragActive(false);
+    window.addEventListener('dragstart', onDragStart);
+    window.addEventListener('dragend', stop);
+    window.addEventListener('drop', stop);
+    return () => {
+      window.removeEventListener('dragstart', onDragStart);
+      window.removeEventListener('dragend', stop);
+      window.removeEventListener('drop', stop);
+    };
+  }, []);
   const [renaming, setRenaming] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
 
@@ -118,14 +177,18 @@ export function ProjectSidebar({
     () => (projects ?? []).reduce((sum, project) => sum + project.noteCount, 0),
     [projects],
   );
+  const rootCount = useMemo(
+    () => (projects ?? []).find((project) => project.kind === 'root')?.noteCount ?? 0,
+    [projects],
+  );
 
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden border-r border-[var(--border)] bg-[var(--surface)]">
-      <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-[var(--border)] px-3.5">
-        <span className="grid size-7 place-items-center rounded-lg bg-[var(--accent)] text-white">
-          <Feather size={14} strokeWidth={2} />
+      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-3.5">
+        <AppIcon className="size-6 shrink-0" />
+        <span className="font-[family-name:var(--font-brand)] text-[15px] tracking-tight text-[var(--text)]">
+          {t('brand')}
         </span>
-        <span className="text-[13.5px] font-semibold tracking-tight">{t('brand')}</span>
       </div>
 
       <div className="flex items-center justify-between px-3.5 pb-2 pt-3.5">
@@ -148,16 +211,18 @@ export function ProjectSidebar({
           name={t('sidebar.allNotes')}
           count={totalNotes}
           active={selectedProjectId === 'all'}
-          icon={<Layers size={14} />}
+          icon={<Layers size={14} strokeWidth={1.75} />}
           onSelect={() => setProject('all')}
         />
         <Row
           id="root"
           name={t('sidebar.uncategorized')}
+          count={rootCount}
           active={selectedProjectId === 'root'}
-          icon={<FolderPlus size={14} />}
+          icon={<Inbox size={14} strokeWidth={1.75} />}
           onSelect={() => setProject('root')}
           onDropNote={(noteId) => onMoveNote(noteId, 'root')}
+          dragging={noteDragActive}
         />
 
         {(projects ?? [])
@@ -169,9 +234,10 @@ export function ProjectSidebar({
               name={project.name}
               count={project.noteCount}
               active={selectedProjectId === project.id}
-              icon={<span className="block size-2.5 rounded-[3px] border border-current" />}
+              icon={<Folder size={14} strokeWidth={1.75} />}
               onSelect={() => setProject(project.id)}
               onDropNote={(noteId) => onMoveNote(noteId, project.id)}
+              dragging={noteDragActive}
               actions={
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>
@@ -218,7 +284,7 @@ export function ProjectSidebar({
       <div className="space-y-0.5 border-t border-[var(--border)] p-2">
         <a
           href="/api/export/vault"
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-[7px] text-[13px] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
         >
           <Download size={14} className="text-[var(--text-faint)]" />
           {t('sidebar.exportVault')}
@@ -226,7 +292,7 @@ export function ProjectSidebar({
         <button
           type="button"
           onClick={onCleanUnused}
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-[7px] text-[13px] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
         >
           <Eraser size={14} className="text-[var(--text-faint)]" />
           {t('sidebar.cleanUnused')}
@@ -234,7 +300,7 @@ export function ProjectSidebar({
         <button
           type="button"
           onClick={onOpenTrash}
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-[7px] text-[13px] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
         >
           <Trash2 size={14} className="text-[var(--text-faint)]" />
           {t('sidebar.trash')}

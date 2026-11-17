@@ -1,5 +1,6 @@
-import { Feather, Keyboard, Plus } from 'lucide-react';
+import { Keyboard, Plus } from 'lucide-react';
 import { useI18n } from '../lib/i18n';
+import { AppIcon } from './AppIcon';
 
 interface Props {
   onCreate: () => void;
@@ -10,9 +11,7 @@ export function EmptyState({ onCreate }: Props) {
   return (
     <div className="grid h-full place-items-center bg-[var(--surface)] px-8">
       <div className="max-w-sm text-center">
-        <div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-          <Feather size={26} strokeWidth={1.6} />
-        </div>
+        <AppIcon className="mx-auto mb-5 block size-14" />
         <h2 className="text-lg font-semibold">{t('empty.title')}</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-[var(--text-muted)]">
           {t('empty.description')}

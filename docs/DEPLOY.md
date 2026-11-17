@@ -5,8 +5,8 @@
 一个容器同时提供：
 
 - `/` 与 `/note/*`：React SPA（静态文件，`index.html` 不缓存，`/assets` 带哈希长缓存）
-- `/api/*`：Web API 与 Papyra 兼容 API
-- `/api/media/*`：Papyra 媒体文件（图片另可用 `/api/notes/{id}/assets/i/*`）
+- `/api/*`：Web API 与入库兼容 API
+- `/api/media/*`：入库媒体文件（图片另可用 `/api/notes/{id}/assets/i/*`）
 - `/healthz`：健康检查
 - `/api/events`：SSE（M1 起），反向代理需允许长连接
 
@@ -20,7 +20,7 @@
 | `MIAOYAN_STATE_DIR` | `/lzcapp/var/miaoyan` 或 `./data/.miaoyan-state` | 索引、版本、缓存；可重建，但版本历史在重建后丢失 |
 | `MIAOYAN_DEFAULT_UID` | 空 | 多用户设备上，给不带 `X-HC-User-ID` 的 API-key 请求指定用户 |
 | `MIAOYAN_WEB_PASSWORD` | 空 | 独立部署的网页密码；设置后 SPA 显示登录页，会话为 30 天 HMAC cookie。懒猫上保持为空，由网关登录 |
-| `MIAOYAN_API_KEY` | 空 | Papyra-ingest 等机器调用的密钥；设置后 `/api/*` 要求 `X-API-Key`，常量时间比较。同一 IP 5 分钟失败 8 次会限流 |
+| `MIAOYAN_API_KEY` | 空 | `miaoyan-ingest` 等机器调用的密钥；设置后 `/api/*` 要求 `X-API-Key`，常量时间比较。同一 IP 5 分钟失败 8 次会限流 |
 | `MIAOYAN_MAX_UPLOAD_MB` | `100` | 单次上传上限，Kestrel 与 `MultipartReader` 共用 |
 | `MIAOYAN_PLANTUML_JAR` | `/opt/plantuml/plantuml.jar` | 镜像内已内置；设为空可禁用 |
 | `MIAOYAN_WHISPER_CMD` | 空 | 可选转写命令，如 `whisper --model small --output txt {input}` |
@@ -77,13 +77,16 @@ sudo chown -R 1000:1000 /srv/miaoyan
 见 [../lazycat/README.md](../lazycat/README.md)。关键点：
 
 - `package.yml.permissions.required` 必须有 `document.private`。
+- manifest 声明 `multi_instance: true`，每位用户一个容器，数据按用户隔离。
 - 用 `services` + 显式 `entrypoint`，`run_as: "1000:1000"`。
 - 书库自动定位到 `/lzcapp/documents/<uid>/MiaoYan`，状态到 `/lzcapp/var/miaoyan/<uid>`。
 - 镜像必须位于 `registry.lazycat.cloud` 才能过审。
 
 没有 Docker 但想先侧载试用时，可以运行 `./scripts/build-sideload-lpk.sh --copy-to-netdisk`：
 它把框架依赖发布物装进 LPK 的 `contentdir`，使用官方 ASP.NET 运行时镜像，无需构建或推送
-自定义镜像；该变体不包含 PlantUML/ffmpeg，且不能直接提交商店。详见
+自定义镜像；该变体不包含 PlantUML/ffmpeg，默认不能直接提交商店；如果暂时没有
+Docker，可用 `appstore copy-image mcr.microsoft.com/dotnet/aspnet:10.0` 复制官方
+运行时后提交（content 仅 linux-x64）。详见
 [../lazycat/README.md](../lazycat/README.md)。
 
 上架前必须在真实懒猫容器里完成一次手工验收（本仓库的开发机没有容器运行时）：

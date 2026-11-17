@@ -7,14 +7,17 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown } from '@codemirror/lang-markdown';
 import { bracketMatching, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { searchKeymap } from '@codemirror/search';
-import { EditorState } from '@codemirror/state';
+import { EditorState, StateField, type Text } from '@codemirror/state';
 import {
+  Decoration,
   drawSelection,
   dropCursor,
   EditorView,
   keymap,
   placeholder as placeholderExt,
   rectangularSelection,
+  WidgetType,
+  type DecorationSet,
 } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import {
@@ -53,10 +56,10 @@ interface Props {
 }
 
 const highlightStyle = HighlightStyle.define([
-  { tag: tags.heading1, fontSize: '1.5em', fontWeight: '650', color: 'var(--md-heading)' },
-  { tag: tags.heading2, fontSize: '1.3em', fontWeight: '650', color: 'var(--md-heading)' },
-  { tag: tags.heading3, fontSize: '1.15em', fontWeight: '650', color: 'var(--md-heading)' },
-  { tag: [tags.heading4, tags.heading5, tags.heading6], fontWeight: '650', color: 'var(--md-heading)' },
+  { tag: tags.heading1, fontSize: '1.42em', fontWeight: '700', color: 'var(--md-heading)' },
+  { tag: tags.heading2, fontSize: '1.24em', fontWeight: '700', color: 'var(--md-heading)' },
+  { tag: tags.heading3, fontSize: '1.1em', fontWeight: '700', color: 'var(--md-heading)' },
+  { tag: [tags.heading4, tags.heading5, tags.heading6], fontWeight: '700', color: 'var(--md-heading)' },
   { tag: tags.strong, fontWeight: '650', color: 'var(--md-strong)' },
   { tag: tags.emphasis, fontStyle: 'italic' },
   { tag: tags.strikethrough, textDecoration: 'line-through', color: 'var(--text-faint)' },
@@ -65,7 +68,6 @@ const highlightStyle = HighlightStyle.define([
   { tag: tags.quote, color: 'var(--md-quote)', fontStyle: 'italic' },
   { tag: tags.meta, color: 'var(--text-faint)' },
   { tag: tags.comment, color: 'var(--text-faint)', fontStyle: 'italic' },
-  { tag: tags.list, color: 'var(--md-list)' },
   { tag: tags.processingInstruction, color: 'var(--text-faint)' },
 ]);
 
@@ -101,21 +103,82 @@ function selectedLines(view: EditorView): { from: number; to: number }[] {
   return lines;
 }
 
+/** Shows the writing hint while only hidden frontmatter is left. */
+class EmptyNoteHint extends WidgetType {
+  toDOM() {
+    const hint = document.createElement('span');
+    hint.className = 'cm-empty-note-hint';
+    hint.textContent = t('editor.placeholder');
+    return hint;
+  }
+
+  eq() {
+    return true;
+  }
+}
+
+/**
+ * The managed frontmatter is metadata, not prose: hide it from the editor while
+ * leaving the document unchanged, so saving still round-trips id/created/….
+ * Atomic ranges keep the caret out of the hidden block.
+ */
+function frontmatterDecoration(doc: Text): DecorationSet {
+  if (doc.lines < 2 || doc.line(1).text.trim() !== '---') {
+    return Decoration.none;
+  }
+  for (let number = 2; number <= Math.min(doc.lines, 60); number += 1) {
+    if (doc.line(number).text.trim() === '---') {
+      // Only treat it as frontmatter when the block actually holds YAML keys;
+      // a note that opens with a thematic break must stay visible.
+      const header = doc.sliceString(doc.line(1).to, doc.line(number).from);
+      if (!/^[A-Za-z][\w-]*:/m.test(header)) {
+        return Decoration.none;
+      }
+      // A block replacement may span line breaks; plugins may not provide
+      // block decorations, so this lives in a state field. The hidden text
+      // stays in the document and still round-trips on save.
+      const end = Math.min(doc.line(number).to + 1, doc.length);
+      const empty = doc.sliceString(end).trim().length === 0;
+      return Decoration.set([
+        Decoration.replace({
+          block: true,
+          widget: empty ? new EmptyNoteHint() : undefined,
+        }).range(0, end),
+      ]);
+    }
+  }
+  return Decoration.none;
+}
+
+const frontmatterField = StateField.define<DecorationSet>({
+  create: (state) => frontmatterDecoration(state.doc),
+  update(decorations, transaction) {
+    return transaction.docChanged
+      ? frontmatterDecoration(transaction.state.doc)
+      : decorations;
+  },
+  provide: (field) => [
+    EditorView.decorations.from(field),
+    EditorView.atomicRanges.of((view) => view.state.field(field)),
+  ],
+});
+
 const editorTheme = EditorView.theme({
   '&': {
     height: '100%',
     backgroundColor: 'transparent',
-    fontSize: 'var(--editor-font-size, 15px)',
+    fontSize: 'var(--editor-font-size, 16px)',
   },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
-    fontFamily: 'var(--font-mono)',
-    lineHeight: 'var(--editor-line-height, 1.75)',
+    fontFamily: 'var(--font-reading)',
+    lineHeight: 'var(--editor-line-height, 1.7)',
+    letterSpacing: '0.01em',
     overflow: 'auto',
   },
   '.cm-content': {
-    padding: 'var(--editor-padding-y, 2.5rem) var(--editor-padding-x, 2.5rem) 40vh',
-    maxWidth: 'var(--editor-width, 860px)',
+    padding: 'var(--editor-padding-y, 3rem) var(--editor-padding-x, 3rem) 40vh',
+    maxWidth: 'var(--editor-width, 720px)',
     margin: '0 auto',
     caretColor: 'var(--accent)',
     width: '100%',
@@ -296,6 +359,7 @@ function CodeEditorInner(
                 }),
                 markdown(),
                 syntaxHighlighting(manyLines ? compactHighlightStyle : highlightStyle),
+                frontmatterField,
               ]),
           EditorState.allowMultipleSelections.of(true),
           EditorView.lineWrapping,
@@ -423,9 +487,9 @@ function CodeEditorInner(
       data-testid="code-editor"
       style={
         {
-          '--editor-font-size': `${fontSize ?? 15}px`,
-          '--editor-line-height': String(lineHeight ?? 1.75),
-          '--editor-width': `${contentWidth ?? 860}px`,
+          '--editor-font-size': `${fontSize ?? 16}px`,
+          '--editor-line-height': String(lineHeight ?? 1.7),
+          '--editor-width': `${contentWidth ?? 720}px`,
         } as CSSProperties
       }
     />

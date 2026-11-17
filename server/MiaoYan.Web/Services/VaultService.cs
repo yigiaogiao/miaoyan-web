@@ -43,7 +43,12 @@ public sealed partial class VaultService
         WriteIndented = true,
     };
 
-    [GeneratedRegex(@"\A---\r?\n(?:.*\r?\n)*?---\r?\n", RegexOptions.Singleline)]
+    // Lazy `.*?` anchored at line starts is linear. The previous
+    // `(?:.*\r?\n)*?` with Singleline backtracked catastrophically on a
+    // truncated 2 KB excerpt and, when it did match, could swallow most of the
+    // body; a frontmatter note larger than ~1 KB therefore hung every vault
+    // scan.
+    [GeneratedRegex(@"\A---\r?\n.*?^---\r?\n", RegexOptions.Singleline | RegexOptions.Multiline)]
     private static partial Regex FrontmatterRegex();
 
     [GeneratedRegex(@"!\[[^\]]*\]\([^)]*\)")]
@@ -150,10 +155,10 @@ public sealed partial class VaultService
     }
 
     /// <summary>
-    /// Papyra's list endpoint returns full bodies. Keeping this separate from
+    /// Ingest's list endpoint returns full bodies. Keeping this separate from
     /// the native summary keeps the SPA responsive on a large library.
     /// </summary>
-    public IReadOnlyList<NoteSummaryDto> ListPapyraNotes(VaultRuntime runtime, string? projectId, string? query)
+    public IReadOnlyList<NoteSummaryDto> ListIngestNotes(VaultRuntime runtime, string? projectId, string? query)
     {
         var summaries = ListNotes(runtime, projectId, query);
         var root = runtime.Paths.VaultRoot;
@@ -443,13 +448,13 @@ public sealed partial class VaultService
     }
 
     /// <summary>
-    /// Upsert used by the Papyra-compatible API. The client owns its own note
+    /// Upsert used by the ingest-compatible API. The client owns its own note
     /// ids; they are kept in a small managed frontmatter block so a rename in
     /// the native UI does not break the next publish. Everything the client
     /// did not touch (foreign frontmatter keys, body text outside its markers)
     /// survives.
     /// </summary>
-    public async Task<SaveResult> SavePapyraNoteAsync(
+    public async Task<SaveResult> SaveIngestNoteAsync(
         VaultRuntime runtime,
         string id,
         SaveNoteRequest request,
@@ -462,14 +467,14 @@ public sealed partial class VaultService
         }
 
         var body = MediaLibrary.NormalizeBody(request.Body);
-        var gate = _locks.GetOrAdd("papyra:" + runtime.Key, _ => new SemaphoreSlim(1, 1));
+        var gate = _locks.GetOrAdd("ingest:" + runtime.Key, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken);
         try
         {
             var snapshot = Snapshot(runtime);
             return snapshot.ById.TryGetValue(id, out var existing)
-                ? await UpdatePapyraNoteAsync(runtime, id, existing, body, request, ifMatch, cancellationToken)
-                : await CreatePapyraNoteAsync(runtime, id, body, request, cancellationToken);
+                ? await UpdateIngestNoteAsync(runtime, id, existing, body, request, ifMatch, cancellationToken)
+                : await CreateIngestNoteAsync(runtime, id, body, request, cancellationToken);
         }
         finally
         {
@@ -477,7 +482,7 @@ public sealed partial class VaultService
         }
     }
 
-    private async Task<SaveResult> UpdatePapyraNoteAsync(
+    private async Task<SaveResult> UpdateIngestNoteAsync(
         VaultRuntime runtime,
         string id,
         VaultNote note,
@@ -526,7 +531,7 @@ public sealed partial class VaultService
             var desiredTitle = string.IsNullOrWhiteSpace(request.Title) ? note.Title : request.Title.Trim();
             if (!string.Equals(desiredTitle, note.Title, StringComparison.Ordinal))
             {
-                targetPath = RenameForPapyra(runtime, note, desiredTitle, targetPath);
+                targetPath = RenameForIngest(runtime, note, desiredTitle, targetPath);
             }
 
             var finalTitle = targetPath == note.FullPath
@@ -581,7 +586,7 @@ public sealed partial class VaultService
         }
     }
 
-    private async Task<SaveResult> CreatePapyraNoteAsync(
+    private async Task<SaveResult> CreateIngestNoteAsync(
         VaultRuntime runtime,
         string id,
         string body,
@@ -631,7 +636,7 @@ public sealed partial class VaultService
         return new SaveResult(ToNote(runtime, fresh, bytes), null);
     }
 
-    private string RenameForPapyra(VaultRuntime runtime, VaultNote note, string title, string currentPath)
+    private string RenameForIngest(VaultRuntime runtime, VaultNote note, string title, string currentPath)
     {
         var stem = TitleHelper.ToFileStem(title);
         if (stem.Length == 0 || TitleHelper.IsUuid(stem))
@@ -1161,7 +1166,7 @@ public sealed partial class VaultService
         var fullPath = VaultPath.Combine(directory, relative);
         if (!File.Exists(fullPath))
         {
-            // Media published through the Papyra-compatible API lives at the
+            // Media published through the ingest-compatible API lives at the
             // library root; the same relative path keeps markdown portable
             // when a project note references it.
             fullPath = VaultPath.Combine(runtime.Paths.VaultRoot, relative);

@@ -193,7 +193,7 @@ export const MarkdownPreview = forwardRef(function MarkdownPreview(
     <div ref={scrollerRef} onScroll={onScroll} className="h-full overflow-y-auto">
       <article
         ref={articleRef}
-        className="md-preview mx-auto max-w-3xl px-5 py-8 sm:px-8 sm:py-10"
+        className="md-preview mx-auto w-full max-w-[64rem] px-7 py-12 sm:px-10 sm:py-16"
         onClick={onClick}
         dangerouslySetInnerHTML={{ __html: html }}
       />

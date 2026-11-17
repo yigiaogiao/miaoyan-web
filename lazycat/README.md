@@ -17,14 +17,16 @@
 
 ```yaml
 entrypoint: /usr/local/bin/entrypoint.sh
-command: [dotnet, MiaoYan.Web.dll]
+# command 必须是字符串，不能写成 YAML 列表（manifest schema: *string）；
+# 写成列表会在安装阶段直接失败。
+command: dotnet MiaoYan.Web.dll
 ```
 
-路由指向 `<service>.cloud.lazycat.app.<package-suffix>.lzcapp:5080`：
+路由用短服务名（官方模板的写法）：
 
 ```yaml
 routes:
-  - /=http://miaoyan.cloud.lazycat.app.miaoyanweb.lzcapp:5080
+  - /=http://miaoyan:5080/
 ```
 
 ## 用户与数据隔离
@@ -32,7 +34,8 @@ routes:
 - 网关鉴权后注入受信任的 `X-HC-User-ID`。应用只用它选择书库，不信任客户端伪造的同名头
   （网关会清理后重设）。
 - 私有文稿目录：`/lzcapp/documents/<uid>/MiaoYan`，需要 `document.private`。
-  单个实例可能同时看到多个用户目录；应用按请求头选择，不会串库。
+  manifest 声明 `multi_instance: true`：每位用户一个容器，多实例下应用只会看到当前
+  用户的 UID 子目录，`/lzcapp/var` 也各自独立，不会串库。
 - 状态目录：`/lzcapp/var/miaoyan/<uid 或哈希>`（SQLite 索引、版本历史、缓存）。
   `/lzcapp/var` 由平台保证持久化，删除只损失索引，笔记不受影响。
 - `run_as: "1000:1000"` 让 `/lzcapp` 持久目录的 owner 映射到容器用户，无需 `setup_script`、
@@ -46,15 +49,18 @@ routes:
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t <your-dockerhub>/miaoyan-web:0.1.0 --push .
+  -t <your-dockerhub>/miaoyan-web:1.0.0 --push .
 ```
 
 镜像必须公网可拉取。`copy-image` 是在懒猫服务端执行 `docker pull`，本地镜像无法直接复制。
+仓库里的 `.github/workflows/release-image.yml` 会在推送 `v*` tag 时构建
+`linux/amd64,linux/arm64` 并推到 GHCR；把 GHCR 包设为 public 后，再用
+`prepare-store-image.sh ghcr.io/<owner>/miaoyan-web:1.0.0` 复制到懒猫仓库。
 
 ### 2. 复制到懒猫官方仓库
 
 ```bash
-./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:0.1.0
+./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:1.0.0
 ```
 
 脚本执行 `lzc-cli appstore copy-image`，从输出里取出
@@ -91,8 +97,10 @@ ASP.NET 运行时镜像即可打包。清单是 `lzc-manifest.sideload.yml`，�
 - 不需要 Docker、不需要 `copy-image`，镜像地址是 `mcr.microsoft.com/dotnet/aspnet:10.0`；
 - **PlantUML 不可用**（基础镜像没有 JRE），也没有内置 ffmpeg/OCR/Whisper；Mermaid、Markmap、
   KaTeX 和 PPT 仍在浏览器端正常工作；
-- 不能直接提交商店（镜像不在 `registry.lazycat.cloud`）；上架仍走上面的 Dockerfile +
-  `prepare-store-image.sh` 流程。
+- 默认不能直接提交商店（镜像不在 `registry.lazycat.cloud`）。如果暂时没有 Docker，
+  也可以用 `appstore copy-image mcr.microsoft.com/dotnet/aspnet:10.0` 把运行时镜像
+  复制到懒猫仓库后提交；但 content 是 linux-x64，且没有 PlantUML/ffmpeg，正式上架
+  仍建议走上面的 Dockerfile + `prepare-store-image.sh` 流程。
 
 ### 4. 本机安装测试
 
@@ -112,6 +120,7 @@ Vault mode: lazycat; documents=/lzcapp/documents; state=/lzcapp/var/miaoyan
 
 - [ ] `package.yml`：合法包名、semver 版本、中英文 `locales`、作者、许可证、图标。
 - [ ] `permissions.required` 只包含真正需要的 `document.private`，没有多余的高危权限。
+- [ ] manifest 声明 `multi_instance: true`（按用户读文档/存状态的应用必须）。
 - [ ] 所有镜像已用 `appstore copy-image` 复制到 `registry.lazycat.cloud`，manifest 已改写。
 - [ ] 安装后 5 分钟内健康；`health_check.test_url` 或容器 healthcheck 通过。
 - [ ] 免登录：经懒猫网关访问不出现应用自己的登录页（当前直接信任网关）。
@@ -119,6 +128,20 @@ Vault mode: lazycat; documents=/lzcapp/documents; state=/lzcapp/var/miaoyan
 - [ ] 多用户：两位用户分别打开，各看到各自的书库；升级后不串库。
 - [ ] 截图、商店描述、更新日志准备好；`version` 与镜像 tag 对应。
 - [ ] `./scripts/verify-lazycat.sh` 通过。
+
+## 商店资料（开发者中心）
+
+- 图标：PNG，≤200 KB，512×512（当前 `icon.png` 已满足）。
+- 桌面截图：≥2、≤8 张，16:9，每边 1080–7680 px。
+- 手机截图：声明「支持移动端」时 ≥3、≤8 张，16:9，每边 320–3840 px。
+- 中英文条目**分别**上传截图并勾选平台；切换语言后截图区会归零，漏传会报
+  「本地化应用信息不完整」。
+- 本项目以 tw93/MiaoYan 的功能和交互为基准，**不要勾“原创开发”**；`source_author`
+  填 `tw93`，`source` 地址填 <https://github.com/tw93/MiaoYan>，并给出本仓库的公开源码地址。
+- `package.yml` 的 `name` / `description` / `locales` 会带出并锁定商店名称和简介；
+  改文案要改 `package.yml` 重新上传版本。
+- 发布前先把本仓库推到公开 GitHub（`package.yml` 的 `homepage` 指向
+  <https://github.com/yigiaogiao/miaoyan-web>），否则商店 `source` 字段没有有效地址。
 
 ## 离线内嵌镜像（不推荐上架用）
 

@@ -1,9 +1,14 @@
 application:
   subdomain: miaoyan
+  # Each user gets their own container. With document.private this means the
+  # app only sees the current user's /lzcapp/documents/<uid> subtree, and
+  # /lzcapp/var is isolated per user too. Required for store review: a
+  # single-instance app can see every user's private documents folder.
+  multi_instance: true
   routes:
-    - /=http://miaoyan.cloud.lazycat.app.miaoyanweb.lzcapp:5080
+    - /=http://miaoyan:5080/
   injects:
-    # Same reasoning as Papyra: the gateway can heuristically cache the entry
+    # The gateway can heuristically cache the entry
     # HTML, which would keep old bundles alive after an upgrade. Hashed /assets
     # and API responses are excluded.
     - id: miaoyan-revalidate-html
@@ -25,11 +30,10 @@ services:
     # Replace with the registry.lazycat.cloud reference printed by
     # `lzc-cli appstore copy-image` before submitting to the store.
     # See lazycat/README.md and scripts/prepare-store-image.sh.
-    image: registry.lazycat.cloud/miaoyan/miaoyan-web:0.1.0
+    image: registry.lazycat.cloud/miaoyan/miaoyan-web:1.0.0
     entrypoint: /usr/local/bin/entrypoint.sh
-    command:
-      - dotnet
-      - MiaoYan.Web.dll
+    # command is a string, not a list (manifest schema: *string).
+    command: dotnet MiaoYan.Web.dll
     # Maps /lzcapp persistent directory owners to the container user and makes
     # /lzcapp/documents/<uid> usable. Requires lzcos >= 1.6.0.
     run_as: "1000:1000"

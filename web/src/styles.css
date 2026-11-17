@@ -1,138 +1,171 @@
 @import 'tailwindcss';
 
+/* LXGW WenKai (SIL OFL) is the closest open reading face to MiaoYan's
+   bundled TsangerJinKai02: a screen-tuned modern Kai. Bundling it
+   keeps the reading pane identical on macOS, Windows, Linux and tablets
+   instead of silently falling back to SimSun. */
+@font-face {
+  font-family: 'LXGW WenKai';
+  src: url('/fonts/LXGWWenKai-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'LXGW WenKai';
+  src: url('/fonts/LXGWWenKai-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   --font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, monospace;
+  --font-reading: 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Songti SC',
+    'STSong', 'Noto Serif CJK SC', 'Source Han Serif SC', 'SimSun', Georgia,
+    'Times New Roman', serif;
+  --font-brand: 'Charter', 'Iowan Old Style', 'Songti SC', 'Noto Serif CJK SC',
+    Georgia, serif;
 }
 
 :root {
   color-scheme: light;
-  --bg: #f6f5f1;
-  --surface: #fffefa;
+  --bg: #f4f1e8;
+  --surface: #fdfcf8;
   --surface-raised: #ffffff;
-  --surface-sunken: #eeece5;
-  --surface-hover: #f1efe8;
-  --border: #e5e1d8;
-  --border-strong: #d5d0c4;
+  --surface-sunken: #f2efe6;
+  --surface-hover: #f0ede4;
+  --border: #e7e3d7;
+  --border-strong: #d7d1c2;
   --text: #26251f;
-  --text-muted: #65635a;
-  --text-faint: #8b887d;
-  --accent: #2f7d63;
-  --accent-strong: #23624d;
-  --accent-soft: #e4f0ea;
-  --accent-border: #b7d7c8;
+  --text-muted: #6b6a64;
+  --text-faint: #938f84;
+  --accent: #1c5d33;
+  --accent-strong: #154a27;
+  --accent-soft: #e7efe8;
+  --accent-border: #c3d6c7;
   --danger: #a23b32;
   --danger-soft: #f7e6e3;
   --warning: #8a6508;
   --warning-soft: #fbf2da;
-  --selection: #d6e9df;
-  --md-heading: #1e1d18;
-  --md-strong: #1e1d18;
-  --md-link: #2f7d63;
-  --md-code: #8b4a2f;
-  --md-quote: #6f6d63;
-  --md-list: #9a978c;
-  --md-rule: #e5e1d8;
-  --md-code-bg: #f1efe8;
-  --md-table-head: #f1efe8;
+  --selection: #dbe7dc;
+  --selection-row: #eeeae0;
+  --reading-surface: #fbf9f3;
+  --md-heading: #1f1e19;
+  --md-strong: #1f1e19;
+  --md-link: #1c5d33;
+  --md-code: #9a4d2c;
+  --md-quote: #56554e;
+  --md-list: #a09c91;
+  --md-rule: #e7e3d7;
+  --md-code-bg: #f4f1e9;
+  --md-table-head: #f4f1e9;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg: #171815;
-    --surface: #1d1e1a;
-    --surface-raised: #232420;
-    --surface-sunken: #171815;
-    --surface-hover: #22231e;
-    --border: #32342d;
-    --border-strong: #43453c;
-    --text: #eceade;
-    --text-muted: #aba89b;
-    --text-faint: #86837a;
-    --accent: #7cc4a6;
-    --accent-strong: #93d6ba;
-    --accent-soft: #24352d;
-    --accent-border: #3c5a4c;
+    --bg: #151612;
+    --surface: #1c1d18;
+    --surface-raised: #23241e;
+    --surface-sunken: #171814;
+    --surface-hover: #24251e;
+    --border: #32342b;
+    --border-strong: #44463b;
+    --text: #ece9dc;
+    --text-muted: #a9a699;
+    --text-faint: #868378;
+    --accent: #8cc9a8;
+    --accent-strong: #a3d9bb;
+    --accent-soft: #243329;
+    --accent-border: #3c5747;
     --danger: #e08c83;
     --danger-soft: #3a2523;
     --warning: #e5c275;
     --warning-soft: #332c1c;
-    --selection: #2c463a;
-    --md-heading: #f4f2e8;
-    --md-strong: #f4f2e8;
-    --md-link: #7cc4a6;
+    --selection: #2b4234;
+    --selection-row: #262720;
+    --reading-surface: #1b1c17;
+    --md-heading: #f3f1e7;
+    --md-strong: #f3f1e7;
+    --md-link: #8cc9a8;
     --md-code: #e2a98e;
-    --md-quote: #a6a396;
+    --md-quote: #c4c1b4;
     --md-list: #77756a;
-    --md-rule: #32342d;
-    --md-code-bg: #24251f;
-    --md-table-head: #24251f;
+    --md-rule: #32342b;
+    --md-code-bg: #22231d;
+    --md-table-head: #22231d;
   }
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #f6f5f1;
-  --surface: #fffefa;
+  --bg: #f4f1e8;
+  --surface: #fdfcf8;
   --surface-raised: #ffffff;
-  --surface-sunken: #eeece5;
-  --surface-hover: #f1efe8;
-  --border: #e5e1d8;
-  --border-strong: #d5d0c4;
+  --surface-sunken: #f2efe6;
+  --surface-hover: #f0ede4;
+  --border: #e7e3d7;
+  --border-strong: #d7d1c2;
   --text: #26251f;
-  --text-muted: #65635a;
-  --text-faint: #8b887d;
-  --accent: #2f7d63;
-  --accent-strong: #23624d;
-  --accent-soft: #e4f0ea;
-  --accent-border: #b7d7c8;
+  --text-muted: #6b6a64;
+  --text-faint: #938f84;
+  --accent: #1c5d33;
+  --accent-strong: #154a27;
+  --accent-soft: #e7efe8;
+  --accent-border: #c3d6c7;
   --danger: #a23b32;
   --danger-soft: #f7e6e3;
   --warning: #8a6508;
   --warning-soft: #fbf2da;
-  --selection: #d6e9df;
-  --md-heading: #1e1d18;
-  --md-strong: #1e1d18;
-  --md-link: #2f7d63;
-  --md-code: #8b4a2f;
-  --md-quote: #6f6d63;
-  --md-list: #9a978c;
-  --md-rule: #e5e1d8;
-  --md-code-bg: #f1efe8;
-  --md-table-head: #f1efe8;
+  --selection: #dbe7dc;
+  --selection-row: #eeeae0;
+  --reading-surface: #fbf9f3;
+  --md-heading: #1f1e19;
+  --md-strong: #1f1e19;
+  --md-link: #1c5d33;
+  --md-code: #9a4d2c;
+  --md-quote: #56554e;
+  --md-list: #a09c91;
+  --md-rule: #e7e3d7;
+  --md-code-bg: #f4f1e9;
+  --md-table-head: #f4f1e9;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #171815;
-  --surface: #1d1e1a;
-  --surface-raised: #232420;
-  --surface-sunken: #171815;
-  --surface-hover: #22231e;
-  --border: #32342d;
-  --border-strong: #43453c;
-  --text: #eceade;
-  --text-muted: #aba89b;
-  --text-faint: #86837a;
-  --accent: #7cc4a6;
-  --accent-strong: #93d6ba;
-  --accent-soft: #24352d;
-  --accent-border: #3c5a4c;
+  --bg: #151612;
+  --surface: #1c1d18;
+  --surface-raised: #23241e;
+  --surface-sunken: #171814;
+  --surface-hover: #24251e;
+  --border: #32342b;
+  --border-strong: #44463b;
+  --text: #ece9dc;
+  --text-muted: #a9a699;
+  --text-faint: #868378;
+  --accent: #8cc9a8;
+  --accent-strong: #a3d9bb;
+  --accent-soft: #243329;
+  --accent-border: #3c5747;
   --danger: #e08c83;
   --danger-soft: #3a2523;
   --warning: #e5c275;
   --warning-soft: #332c1c;
-  --selection: #2c463a;
-  --md-heading: #f4f2e8;
-  --md-strong: #f4f2e8;
-  --md-link: #7cc4a6;
+  --selection: #2b4234;
+  --selection-row: #262720;
+  --reading-surface: #1b1c17;
+  --md-heading: #f3f1e7;
+  --md-strong: #f3f1e7;
+  --md-link: #8cc9a8;
   --md-code: #e2a98e;
-  --md-quote: #a6a396;
+  --md-quote: #c4c1b4;
   --md-list: #77756a;
-  --md-rule: #32342d;
-  --md-code-bg: #24251f;
-  --md-table-head: #24251f;
+  --md-rule: #32342b;
+  --md-code-bg: #22231d;
+  --md-table-head: #22231d;
 }
 
 html,
@@ -142,8 +175,8 @@ body,
 }
 
 :root {
-  --editor-padding-x: 2.5rem;
-  --editor-padding-y: 2.5rem;
+  --editor-padding-x: 3rem;
+  --editor-padding-y: 3rem;
 }
 
 @media (max-width: 640px) {
@@ -199,10 +232,17 @@ input,
 
 .md-preview {
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.78;
+  font-family: var(--font-reading);
+  font-size: 20px;
+  /* The bundled Kai is a lighter cut than the one MiaoYan used to ship;
+     at reading size the reference sits closer to the bold face. */
+  font-weight: 700;
+  line-height: 1.72;
+  letter-spacing: 0.02em;
   word-wrap: break-word;
   overflow-wrap: anywhere;
+  text-rendering: optimizeLegibility;
+  text-autospace: normal;
 }
 
 .md-preview > *:first-child {
@@ -215,31 +255,33 @@ input,
 .md-preview h4,
 .md-preview h5,
 .md-preview h6 {
-  margin: 1.6em 0 0.55em;
-  font-weight: 650;
-  line-height: 1.3;
+  margin: 1.4em 0 0.4em;
+  font-weight: 700;
+  line-height: 1.4;
   color: var(--md-heading);
-  letter-spacing: -0.01em;
+  letter-spacing: 0.02em;
 }
 
 .md-preview h1 {
-  font-size: 1.7em;
-  padding-bottom: 0.3em;
-  border-bottom: 1px solid var(--md-rule);
+  font-size: 1.76em;
+  margin-bottom: 0.45em;
 }
 
 .md-preview h2 {
-  font-size: 1.4em;
+  font-size: 1.41em;
 }
 
 .md-preview h3 {
   font-size: 1.18em;
+  margin-top: 1.3em;
 }
 
 .md-preview h4,
 .md-preview h5,
 .md-preview h6 {
   font-size: 1em;
+  margin-top: 1.2em;
+  margin-bottom: 0.35em;
 }
 
 .md-preview p,
@@ -248,18 +290,19 @@ input,
 .md-preview blockquote,
 .md-preview pre,
 .md-preview table {
-  margin: 0.85em 0;
+  margin: 1.15em 0;
 }
 
 .md-preview a {
   color: var(--md-link);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 0.18em;
   text-decoration-thickness: 1px;
+  text-decoration-color: var(--accent-border);
 }
 
 .md-preview a:hover {
-  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
 }
 
 .md-preview .wikilink {
@@ -283,13 +326,16 @@ input,
 }
 
 .md-preview strong {
-  font-weight: 650;
+  font-weight: 700;
+  /* Body copy already uses the bold face, so emphasis needs a little more
+     ink than the surrounding text or it disappears. */
+  -webkit-text-stroke: 0.35px currentColor;
   color: var(--md-strong);
 }
 
 .md-preview ul,
 .md-preview ol {
-  padding-left: 1.4em;
+  padding-left: 1.5em;
 }
 
 .md-preview ul {
@@ -301,11 +347,11 @@ input,
 }
 
 .md-preview li {
-  margin: 0.28em 0;
+  margin: 0.35em 0;
 }
 
 .md-preview li > p {
-  margin: 0.35em 0;
+  margin: 0.4em 0;
 }
 
 .md-preview li::marker {
@@ -313,8 +359,9 @@ input,
 }
 
 .md-preview blockquote {
-  padding: 0.15em 1em;
-  border-left: 3px solid var(--accent-border);
+  padding: 0.2em 0 0.2em 1.1em;
+  border-left: 3px solid var(--border-strong);
+  border-radius: 2px;
   color: var(--md-quote);
 }
 
@@ -326,28 +373,30 @@ input,
   margin-bottom: 0;
 }
 
+/* Inline code keeps the reading face: a second family mid-line reads as a
+   mistake rather than as code. Only fenced blocks switch to mono. */
 .md-preview code {
-  padding: 0.15em 0.38em;
-  border-radius: 5px;
+  padding: 0.12em 0.38em;
+  border-radius: 4px;
   background: var(--md-code-bg);
-  font-family: var(--font-mono);
-  font-size: 0.88em;
-  color: var(--md-code);
+  font-family: inherit;
+  font-size: 0.94em;
+  color: inherit;
 }
 
 .md-preview pre {
-  padding: 1em 1.15em;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  padding: 1.1em 1.25em;
+  border-radius: 8px;
   background: var(--md-code-bg);
   overflow-x: auto;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .md-preview pre code {
   padding: 0;
   background: transparent;
-  font-size: 0.86em;
+  font-family: var(--font-mono);
+  font-size: 0.84em;
   color: var(--text);
 }
 
@@ -592,7 +641,7 @@ input,
 
 @media (max-width: 640px) {
   .md-preview {
-    font-size: 14.5px;
+    font-size: 17px;
   }
 }
 
@@ -679,6 +728,50 @@ input,
 
 .ppt-reveal .fragment.visible {
   opacity: 1;
+}
+
+/* Drag preview for a note. Without an explicit drag image the browser
+   snapshots the whole note card, which is wide enough to hide the folder
+   list underneath it. The chip is rendered off the top-left corner and
+   removed as soon as the drag begins. */
+.note-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  padding: 5px 10px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: 500 12.5px/1.4 var(--font-sans);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+  pointer-events: none;
+  opacity: 0.96;
+}
+
+.note-drag-ghost::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.cm-empty-note-hint {
+  color: var(--text-faint);
+}
+
+.note-drag-ghost > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Stack every slide when printing so the browser's PDF export keeps them. */

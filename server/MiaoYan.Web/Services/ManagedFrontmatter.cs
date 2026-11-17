@@ -6,7 +6,7 @@ namespace MiaoYan.Web.Services;
 
 /// <summary>
 /// The small YAML header written for notes created or updated through the
-/// Papyra-compatible API. MiaoYan notes never get one just for being imported;
+/// ingest-compatible API. MiaoYan notes never get one just for being imported;
 /// the header is only added when a machine client asks us to own the metadata.
 /// Foreign keys in an existing header are preserved line-by-line.
 /// </summary>

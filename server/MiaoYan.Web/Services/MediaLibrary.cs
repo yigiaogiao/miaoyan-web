@@ -10,7 +10,7 @@ namespace MiaoYan.Web.Services;
 public sealed record MediaFile(string FullPath, string FileName);
 
 /// <summary>
-/// Root-level <c>i/</c> and <c>files/</c> media used by the Papyra-compatible
+/// Root-level <c>i/</c> and <c>files/</c> media used by the ingest-compatible
 /// API. Uploads are content-addressed, so re-publishing an article reuses the
 /// same file instead of accumulating copies. Note-relative assets created by
 /// the editor keep working through the fallback in VaultService.ResolveAsset.
@@ -55,7 +55,7 @@ public sealed partial class MediaLibrary
     }
 
     /// <summary>
-    /// Rewrites the placeholders papyra-ingest emits into normal MiaoYan
+    /// Rewrites the placeholders miaoyan-ingest emits into normal MiaoYan
     /// relative media. Audio is an image-style embed because the preview turns
     /// known audio extensions into an audio element.
     /// </summary>
@@ -86,7 +86,7 @@ public sealed partial class MediaLibrary
         });
     }
 
-    public async Task<PapyraMediaDto> SaveAsync(
+    public async Task<IngestMediaDto> SaveAsync(
         VaultRuntime runtime,
         IFormFile file,
         long maxBytes,
@@ -287,12 +287,12 @@ public sealed partial class MediaLibrary
         return null;
     }
 
-    private static PapyraMediaDto Describe(string fullPath, string name, string kind, string hash)
+    private static IngestMediaDto Describe(string fullPath, string name, string kind, string hash)
     {
         var info = new FileInfo(fullPath);
         var url = "/api/media/" + Uri.EscapeDataString(name);
         var markdown = $"![]({SubdirectoryFor(name)}/{Uri.EscapeDataString(name)})";
-        return new PapyraMediaDto(
+        return new IngestMediaDto(
             name,
             kind,
             ContentTypeFor(name),

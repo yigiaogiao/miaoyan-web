@@ -23,6 +23,5 @@ SOFTWARE.
 ---
 
 MiaoYan (https://github.com/tw93/MiaoYan) is MIT licensed and is used here as
-a behavioural reference only. Papyra (https://papyra.app) is GPL-3.0 licensed;
-this project reimplements a compatible HTTP surface and does not copy Papyra
-source code. No application assets from either project are redistributed.
+a behavioural reference only. The ingest compatibility API is an independent
+implementation; no third-party source code or assets are redistributed.

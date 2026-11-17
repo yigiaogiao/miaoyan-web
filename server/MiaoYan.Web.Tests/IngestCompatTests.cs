@@ -8,11 +8,11 @@ using MiaoYan.Web.Api;
 
 namespace MiaoYan.Web.Tests;
 
-public sealed class PapyraCompatTests : IClassFixture<PapyraCompatTests.CompatFixture>
+public sealed class IngestCompatTests : IClassFixture<IngestCompatTests.CompatFixture>
 {
     private readonly CompatFixture _vault;
 
-    public PapyraCompatTests(CompatFixture vault)
+    public IngestCompatTests(CompatFixture vault)
     {
         _vault = vault;
     }
@@ -168,7 +168,7 @@ public sealed class PapyraCompatTests : IClassFixture<PapyraCompatTests.CompatFi
 
         var upload = await _vault.UploadAsync(png, "封面图.png", "image/png");
         upload.EnsureSuccessStatusCode();
-        var media = await upload.Content.ReadFromJsonAsync<PapyraMediaDto>();
+        var media = await upload.Content.ReadFromJsonAsync<IngestMediaDto>();
         Assert.NotNull(media);
         Assert.Equal("image", media.Kind);
         Assert.Equal("image/png", media.Mime);
@@ -188,7 +188,7 @@ public sealed class PapyraCompatTests : IClassFixture<PapyraCompatTests.CompatFi
 
         var again = await _vault.UploadAsync(png, "另一个名字.png", "image/png");
         again.EnsureSuccessStatusCode();
-        var duplicate = await again.Content.ReadFromJsonAsync<PapyraMediaDto>();
+        var duplicate = await again.Content.ReadFromJsonAsync<IngestMediaDto>();
         Assert.NotNull(duplicate);
         Assert.Equal(media.Filename, duplicate.Filename);
 
@@ -206,9 +206,9 @@ public sealed class PapyraCompatTests : IClassFixture<PapyraCompatTests.CompatFi
 
         var created = await _vault.Client.PostAsJsonAsync(
             "/api/categories",
-            new PapyraCategoryRequest("数据库", "#00aa66"));
+            new IngestCategoryRequest("数据库", "#00aa66"));
         created.EnsureSuccessStatusCode();
-        var category = await created.Content.ReadFromJsonAsync<PapyraCategoryDto>();
+        var category = await created.Content.ReadFromJsonAsync<IngestCategoryDto>();
         Assert.NotNull(category);
         Assert.Equal("数据库", category.Name);
         Assert.Equal("#00aa66", category.Color);
@@ -216,10 +216,10 @@ public sealed class PapyraCompatTests : IClassFixture<PapyraCompatTests.CompatFi
 
         var empty = await _vault.Client.PostAsJsonAsync(
             "/api/categories",
-            new PapyraCategoryRequest("稍后使用", null));
+            new IngestCategoryRequest("稍后使用", null));
         empty.EnsureSuccessStatusCode();
 
-        var list = await _vault.Client.GetFromJsonAsync<List<PapyraCategoryDto>>("/api/categories");
+        var list = await _vault.Client.GetFromJsonAsync<List<IngestCategoryDto>>("/api/categories");
         Assert.NotNull(list);
         Assert.Equal(0, Assert.Single(list!, item => item.Name == "稍后使用").Count);
         var design = Assert.Single(list!, item => item.Name == "设计");
@@ -267,13 +267,34 @@ public sealed class PapyraCompatTests : IClassFixture<PapyraCompatTests.CompatFi
         Assert.Contains("更新正文。", onDisk);
     }
 
+    [Fact]
+    public async Task LongFrontmatterNote_DoesNotStallVaultScan()
+    {
+        var paragraphs = string.Join(
+            "\n\n",
+            Enumerable.Range(0, 300).Select(index =>
+                $"第 {index} 段正文：中文内容用来把摘要撑到两千字节以上。"));
+        var body = paragraphs + "\n\n---\n\n---\n\n尾部正文。";
+        var published = await _vault.PublishAsync("ingest-long-scan", "长正文扫描", body);
+        published.EnsureSuccessStatusCode();
+
+        // The old frontmatter regex backtracked catastrophically on the 2 KB
+        // excerpt, so this request would never come back.
+        var list = await _vault.Client
+            .GetFromJsonAsync<List<NoteSummaryDto>>("/api/notes")
+            .WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.NotNull(list);
+        var listed = Assert.Single(list!, item => item.Title == "长正文扫描");
+        Assert.StartsWith("第 0 段正文", listed.Body);
+    }
+
     public sealed class CompatFixture : IDisposable
     {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
         public CompatFixture()
         {
-            Root = Path.Combine(Path.GetTempPath(), "miaoyan-papyra-tests", Guid.NewGuid().ToString("N"));
+            Root = Path.Combine(Path.GetTempPath(), "miaoyan-ingest-tests", Guid.NewGuid().ToString("N"));
             Library = Path.Combine(Root, "library");
             State = Path.Combine(Root, "state");
             Directory.CreateDirectory(Library);
