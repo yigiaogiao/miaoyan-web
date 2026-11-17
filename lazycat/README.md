@@ -53,6 +53,10 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ```
 
 镜像必须公网可拉取。`copy-image` 是在懒猫服务端执行 `docker pull`，本地镜像无法直接复制。
+
+> .NET 10 的 `aspnet:10.0` 基础镜像可能已经占用 GID/UID 1000。Dockerfile 用
+> `getent group 1000 || groupadd ...`、`getent passwd 1000 || useradd ...` 幂等创建，
+> 否则 buildx 会报 `groupadd: GID '1000' already exists` 并中断。
 仓库里的 `.github/workflows/release-image.yml` 会在推送 `v*` tag 时构建
 `linux/amd64,linux/arm64` 并推到 GHCR；把 GHCR 包设为 public 后，再用
 `prepare-store-image.sh ghcr.io/<owner>/miaoyan-web:1.0.0` 复制到懒猫仓库。

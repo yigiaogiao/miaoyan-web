@@ -30,7 +30,7 @@ services:
     # Replace with the registry.lazycat.cloud reference printed by
     # `lzc-cli appstore copy-image` before submitting to the store.
     # See lazycat/README.md and scripts/prepare-store-image.sh.
-    image: registry.lazycat.cloud/miaoyan/miaoyan-web:1.0.0
+    image: registry.lazycat.cloud/u66934985/yigiaogiao/miaoyan-web:88e3c75630fa821e
     entrypoint: /usr/local/bin/entrypoint.sh
     # command is a string, not a list (manifest schema: *string).
     command: dotnet MiaoYan.Web.dll
