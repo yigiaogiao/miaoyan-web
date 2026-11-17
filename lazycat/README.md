@@ -131,6 +131,8 @@ Vault mode: lazycat; documents=/lzcapp/documents; state=/lzcapp/var/miaoyan
 - [ ] 数据持久化：重启、升级、卸载重装后 `/lzcapp/documents/<uid>/MiaoYan` 仍在。
 - [ ] 多用户：两位用户分别打开，各看到各自的书库；升级后不串库。
 - [ ] 截图、商店描述、更新日志准备好；`version` 与镜像 tag 对应。
+- [ ] 桌面优先时在 `package.yml` 声明 `unsupported_platforms: [ios, android]`；
+      当前截图在 `lazycat/screenshots/`（中英文各一套 1920×1080）。
 - [ ] `./scripts/verify-lazycat.sh` 通过。
 
 ## 商店资料（开发者中心）
