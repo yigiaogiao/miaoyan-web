@@ -90,6 +90,18 @@ public sealed class MediaToolsTests : IClassFixture<MediaToolsTests.ToolsFixture
     }
 
     [Fact]
+    public async Task DuplicateAssetNamesKeepMarkdownSafeSuffixes()
+    {
+        var note = await _tools.CreateNoteAsync("同名图片");
+        var first = await _tools.UploadAsync(note.Id, "image 1.png", "image/png", [0x89, 0x50]);
+        var second = await _tools.UploadAsync(note.Id, "image 1.png", "image/png", [0x89, 0x50, 0x00]);
+
+        Assert.Equal("image-1.png", first.Name);
+        Assert.Equal("image-1-1.png", second.Name);
+        Assert.DoesNotContain(" ", second.Markdown);
+    }
+
+    [Fact]
     public async Task UnusedAssetsKeepsLegacySpacedMarkdownReferences()
     {
         var note = await _tools.CreateNoteAsync("旧图片");

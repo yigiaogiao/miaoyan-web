@@ -95,6 +95,30 @@ public static partial class TitleHelper
         return candidate;
     }
 
+    /// <summary>
+    /// Attachment names must stay Markdown-safe even when an upload gets a
+    /// numeric suffix. <see cref="UniqueFileStem"/> uses a space ("image 1"),
+    /// which CommonMark turns back into plain text, so sanitise and retry
+    /// with dashes instead.
+    /// </summary>
+    public static string UniqueAssetStem(string directory, string stem, string extension)
+    {
+        var baseStem = ToAssetStem(stem);
+        if (baseStem.Length == 0)
+        {
+            baseStem = "asset";
+        }
+
+        var candidate = baseStem;
+        var postfix = 0;
+        while (File.Exists(Path.Combine(directory, candidate + extension)))
+        {
+            candidate = $"{baseStem}-{++postfix}";
+        }
+
+        return candidate;
+    }
+
     public static string UniqueDirectory(string parent, string name)
     {
         var candidate = name;

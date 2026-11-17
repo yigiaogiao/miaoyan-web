@@ -1124,7 +1124,7 @@ public sealed partial class VaultService
             extension = string.Empty;
         }
 
-        var uniqueStem = TitleHelper.UniqueFileStem(targetDirectory, stem, extension);
+        var uniqueStem = TitleHelper.UniqueAssetStem(targetDirectory, stem, extension);
         var fileName = uniqueStem + extension;
         var fullPath = Path.Combine(targetDirectory, fileName);
 

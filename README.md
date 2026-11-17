@@ -83,10 +83,10 @@ docker compose up -d --build
 ```bash
 # 1. 构建并推送一个公网可访问的镜像（Docker Hub 等）
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t <your-dockerhub>/miaoyan-web:1.0.1 --push .
+  -t <your-dockerhub>/miaoyan-web:1.0.2 --push .
 
 # 2. 复制到懒猫官方仓库并改写 manifest
-./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:1.0.1
+./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:1.0.2
 
 # 3. 构建 LPK
 ./scripts/package-lpk.sh
