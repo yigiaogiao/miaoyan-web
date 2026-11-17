@@ -35,8 +35,11 @@ RUN apt-get update \
  && curl -fsSL --retry 3 \
       "https://github.com/plantuml/plantuml/releases/download/v${PLANTUML_VERSION}/plantuml-${PLANTUML_VERSION}.jar" \
       -o /opt/plantuml/plantuml.jar \
- && groupadd -g 1000 miaoyan \
- && useradd -u 1000 -g 1000 -M -d /app -s /usr/sbin/nologin miaoyan \
+ # The .NET 10 base image may already use GID/UID 1000 (for example the
+ # `ubuntu` user). Create the miaoyan group/user only when the IDs are free;
+ # gosu below uses numeric 1000:1000, so an existing account is fine.
+ && (getent group 1000 >/dev/null || groupadd -g 1000 miaoyan) \
+ && (getent passwd 1000 >/dev/null || useradd -u 1000 -g 1000 -M -d /app -s /usr/sbin/nologin miaoyan) \
  && mkdir -p /data \
  && chown 1000:1000 /data
 
