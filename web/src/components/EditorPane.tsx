@@ -46,6 +46,7 @@ import {
   Table2,
   Trash2,
   Wand2,
+  Workflow,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -1007,6 +1008,15 @@ export function EditorPane({
             onClick={() => editorRef.current?.insertText(t('format.tableContent'))}
           >
             <Table2 size={15} />
+          </FormatButton>
+          <FormatButton
+            title={t('format.mermaid')}
+            onClick={() => {
+              const template = t('format.mermaidContent');
+              editorRef.current?.insertTemplate(template, template.indexOf('\n') + 1);
+            }}
+          >
+            <Workflow size={15} />
           </FormatButton>
           <FormatButton
             title={t('format.math')}

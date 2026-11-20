@@ -49,7 +49,7 @@ routes:
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t <your-dockerhub>/miaoyan-web:1.0.2 --push .
+  -t <your-dockerhub>/miaoyan-web:1.0.4 --push .
 ```
 
 镜像必须公网可拉取。`copy-image` 是在懒猫服务端执行 `docker pull`，本地镜像无法直接复制。
@@ -59,12 +59,12 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 > 否则 buildx 会报 `groupadd: GID '1000' already exists` 并中断。
 仓库里的 `.github/workflows/release-image.yml` 会在推送 `v*` tag 时构建
 `linux/amd64,linux/arm64` 并推到 GHCR；把 GHCR 包设为 public 后，再用
-`prepare-store-image.sh ghcr.io/<owner>/miaoyan-web:1.0.2` 复制到懒猫仓库。
+`prepare-store-image.sh ghcr.io/<owner>/miaoyan-web:1.0.4` 复制到懒猫仓库。
 
 ### 2. 复制到懒猫官方仓库
 
 ```bash
-./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:1.0.2
+./scripts/prepare-store-image.sh <your-dockerhub>/miaoyan-web:1.0.4
 ```
 
 脚本执行 `lzc-cli appstore copy-image`，从输出里取出
@@ -131,6 +131,10 @@ Vault mode: lazycat; documents=/lzcapp/documents; state=/lzcapp/var/miaoyan
 - [ ] 数据持久化：重启、升级、卸载重装后 `/lzcapp/documents/<uid>/MiaoYan` 仍在。
 - [ ] 多用户：两位用户分别打开，各看到各自的书库；升级后不串库。
 - [ ] 截图、商店描述、更新日志准备好；`version` 与镜像 tag 对应。
+- [ ] 前端有原生文件入口时，注入 `lzc-file-chooser-inject.js`：`application.injects`
+      里同时有 `lazycat-file-bridge`（request）和 `open-save-chooser`（browser），
+      脚本打进 `contentdir`。镜像型 LPK 也要加一个只放 inject 的小 `contentdir`，
+      否则 `file:///lzcapp/pkg/content/...` 找不到文件（2026-11-18 审核被拒后补）。
 - [ ] 桌面优先时在 `package.yml` 声明 `unsupported_platforms: [ios, android]`；
       当前截图在 `lazycat/screenshots/`（中英文各一套 1920×1080）。
 - [ ] `./scripts/verify-lazycat.sh` 通过。
@@ -148,6 +152,41 @@ Vault mode: lazycat; documents=/lzcapp/documents; state=/lzcapp/var/miaoyan
   改文案要改 `package.yml` 重新上传版本。
 - 发布前先把本仓库推到公开 GitHub（`package.yml` 的 `homepage` 指向
   <https://github.com/yigiaogiao/miaoyan-web>），否则商店 `source` 字段没有有效地址。
+
+### 首次上架：用开发者中心 API 填资料
+
+`lzc-cli appstore publish` 只提交版本信息（`version`），不传 `infos`；第一次上架前
+必须补齐应用信息、适用平台和截图。除了网页「编辑更新应用」，也可以直接用开发者中心
+API 一次完成：
+
+1. token 在 `~/.config/lazycat/box-config.json`；请求头同时带
+   `X-User-Token: <token>` 和 `Cookie: userToken=<token>`。
+2. API base：`https://appstore.api.lazycat.cloud/api/v3/developer`。
+3. 依次调用 `POST /app/create`、`POST /upload`（截图，每张一次，字段名 `file`）、
+   `POST /app/lpk/upload`（字段名 `file`）、`POST /app/<app_id>/review/create`。
+4. `review/create` 的 body 为
+   `{submit_channel: 3, infos: [...], version: {...}}`。`infos` 按语言各一条，
+   含 `name`、`brief`、`description`、`keywords`、`source`、`source_author`、
+   `support_pc`、`support_mobile`、`screenshot_pc_paths`、`screenshot_mobile_paths`；
+   `version` 直接使用 LPK 上传接口的返回字段（`pkg_path` 用返回的 `url`，
+   `pkg_hash` 用 `sha256`）。
+5. 注意：`curl -X POST` 对这些路由会返回 404 `Not Found`，改用 Node
+   `fetch` + `form-data` 才能成功（2026-11-17 妙言 1.0.2 实测）。
+
+### 文件拦截器（审核必查）
+
+应用前端有原生文件入口（图片/附件上传），商店要求接入懒猫统一文件选择器。
+`lzc-manifest.yml` 的 `application.injects` 里有两条，缺一不可：
+
+- `lazycat-file-bridge`（`on: request`）：共享目录读写的同源桥接；
+- `open-save-chooser`（`on: browser`）：注入官方
+  `lzc-file-chooser-inject.js`，把 `<input type="file">` 换成「网盘文件 / 本地文件」
+  两页签窗口。
+
+脚本放在 `content/lazycat-injects/`，`lzc-build.yml` 用 `contentdir: ./content`
+打进 LPK；侧载构建脚本会把它复制到 `publish/lazycat-injects/`。**只用远程镜像时
+也要保留这个 contentdir**，否则 `file:///lzcapp/pkg/content/...` 找不到脚本，
+审核会以「没有文件拦截器注入」拒绝。
 
 ## 离线内嵌镜像（不推荐上架用）
 

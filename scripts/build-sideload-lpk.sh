@@ -35,6 +35,13 @@ rm -rf "${ROOT}/lazycat/publish"
   -c Release -r linux-x64 --self-contained false \
   -o "${ROOT}/lazycat/publish" -p:UseAppHost=false -p:CompressionEnabled=false
 
+# Store review requires the official file-chooser inject. The store build packs
+# it from lazycat/content; the sideload build uses lazycat/publish as contentdir,
+# so copy it alongside the published app.
+mkdir -p "${ROOT}/lazycat/publish/lazycat-injects"
+cp "${ROOT}/lazycat/content/lazycat-injects/lzc-file-chooser-inject.js" \
+  "${ROOT}/lazycat/publish/lazycat-injects/"
+
 if command -v lzc-cli >/dev/null 2>&1; then
   LZC=(lzc-cli)
 else

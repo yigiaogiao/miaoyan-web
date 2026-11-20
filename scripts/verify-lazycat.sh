@@ -59,6 +59,10 @@ check "run_as 1000:1000 declared" grep -q 'run_as: "1000:1000"' "${MANIFEST}"
 check "health check present" grep -q 'http://127.0.0.1:5080/healthz' "${MANIFEST}"
 check "state dir under /lzcapp/var" grep -q 'MIAOYAN_STATE_DIR=/lzcapp/var/miaoyan' "${MANIFEST}"
 check "no legacy ext_config permissions" bash -c "! grep -q 'ext_config' '${MANIFEST}'"
+check "file chooser browser inject present" grep -q 'lzc-file-chooser-inject.js' "${MANIFEST}"
+check "file bridge request inject present" grep -q 'lazycat-file-bridge' "${MANIFEST}"
+check "file chooser script packaged" test -f "${ROOT}/lazycat/content/lazycat-injects/lzc-file-chooser-inject.js"
+check "store contentdir points at inject dir" grep -q '^contentdir: ./content$' "${ROOT}/lazycat/lzc-build.yml"
 
 if [[ "${fail}" -ne 0 ]]; then
   echo "" >&2

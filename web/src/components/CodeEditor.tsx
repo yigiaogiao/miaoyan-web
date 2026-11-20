@@ -7,7 +7,13 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown } from '@codemirror/lang-markdown';
 import { bracketMatching, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { searchKeymap } from '@codemirror/search';
-import { EditorState, StateField, type Text } from '@codemirror/state';
+import {
+  ChangeSet,
+  EditorState,
+  StateField,
+  type ChangeSpec,
+  type Text,
+} from '@codemirror/state';
 import {
   Decoration,
   drawSelection,
@@ -33,6 +39,7 @@ import { slashCompletionSource } from '../lib/slash';
 
 export interface CodeEditorHandle {
   insertText: (text: string, position?: number) => void;
+  insertTemplate: (text: string, cursorOffset?: number) => void;
   wrapSelection: (before: string, after: string, placeholder?: string) => void;
   toggleHeading: (level: number) => void;
   toggleLinePrefix: (prefix: string, ordered?: boolean) => void;
@@ -101,6 +108,20 @@ function selectedLines(view: EditorView): { from: number; to: number }[] {
     lines.push({ from: line.from, to: line.to });
   }
   return lines;
+}
+
+/**
+ * Maps the current selection through line-level changes with a forward
+ * association. CodeMirror's default is assoc -1, which leaves the caret at
+ * the insertion point *before* a new heading/list marker; with assoc 1 it
+ * lands after the marker, ready to type.
+ */
+function changesWithCaretAfter(view: EditorView, changes: ChangeSpec[]) {
+  const set = ChangeSet.of(changes, view.state.doc.length);
+  return {
+    changes: set,
+    selection: view.state.selection.map(set, 1),
+  };
 }
 
 /** Shows the writing hint while only hidden frontmatter is left. */
@@ -233,6 +254,19 @@ function CodeEditorInner(
       });
       view.focus();
     },
+    insertTemplate(text, cursorOffset) {
+      const view = viewRef.current;
+      if (!view) {
+        return;
+      }
+      const pos = view.state.selection.main.head;
+      view.dispatch({
+        changes: { from: pos, insert: text },
+        selection: { anchor: pos + (cursorOffset ?? text.length) },
+        scrollIntoView: true,
+      });
+      view.focus();
+    },
     wrapSelection(before, after, placeholderText) {
       const view = viewRef.current;
       if (!view) {
@@ -267,7 +301,10 @@ function CodeEditorInner(
           insert: already ? '' : prefix,
         };
       });
-      view.dispatch({ changes, scrollIntoView: true });
+      view.dispatch({
+        ...changesWithCaretAfter(view, changes),
+        scrollIntoView: true,
+      });
       view.focus();
     },
     toggleLinePrefix(prefix, ordered = false) {
@@ -297,7 +334,10 @@ function CodeEditorInner(
         }
         return { from: line.from, insert: marker };
       });
-      view.dispatch({ changes, scrollIntoView: true });
+      view.dispatch({
+        ...changesWithCaretAfter(view, changes),
+        scrollIntoView: true,
+      });
       view.focus();
     },
     scrollToLine(line) {

@@ -1,3 +1,7 @@
 manifest: ./lzc-manifest.yml
 pkgout: .
 icon: ./icon.png
+# The app itself ships in the custom image; the only packaged content is the
+# official LazyCat file-chooser inject required by store review. It is mounted
+# at /lzcapp/pkg/content and loaded by the open-save-chooser inject.
+contentdir: ./content
