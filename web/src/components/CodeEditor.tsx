@@ -39,7 +39,7 @@ import { slashCompletionSource } from '../lib/slash';
 
 export interface CodeEditorHandle {
   insertText: (text: string, position?: number) => void;
-  insertTemplate: (text: string, cursorOffset?: number) => void;
+  insertTemplate: (text: string, cursorOffset?: number, selectLength?: number) => void;
   wrapSelection: (before: string, after: string, placeholder?: string) => void;
   toggleHeading: (level: number) => void;
   toggleLinePrefix: (prefix: string, ordered?: boolean) => void;
@@ -254,15 +254,19 @@ function CodeEditorInner(
       });
       view.focus();
     },
-    insertTemplate(text, cursorOffset) {
+    insertTemplate(text, cursorOffset, selectLength) {
       const view = viewRef.current;
       if (!view) {
         return;
       }
       const pos = view.state.selection.main.head;
+      const anchor = pos + (cursorOffset ?? text.length);
       view.dispatch({
         changes: { from: pos, insert: text },
-        selection: { anchor: pos + (cursorOffset ?? text.length) },
+        selection: {
+          anchor,
+          head: anchor + (selectLength ?? 0),
+        },
         scrollIntoView: true,
       });
       view.focus();

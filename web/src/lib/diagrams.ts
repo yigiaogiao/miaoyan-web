@@ -118,7 +118,13 @@ export function renderDiagrams(
       canvas.classList.remove('diagram-error');
       try {
         if (kind === 'mermaid') {
-          await renderMermaid(canvas, source, theme);
+          // An empty block is normal while editing; Mermaid would report
+          // "No diagram type detected", which reads like an app error.
+          if (source.trim() === '') {
+            canvas.textContent = t('diagram.mermaidEmpty');
+          } else {
+            await renderMermaid(canvas, source, theme);
+          }
         } else if (kind === 'plantuml') {
           await renderPlantUml(canvas, source);
         } else if (kind === 'markmap') {

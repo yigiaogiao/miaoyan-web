@@ -142,7 +142,6 @@ const zh = {
   'format.todo': '待办事项',
   'format.table': '表格',
   'format.mermaid': '流程图',
-  'format.mermaidContent': '```mermaid\n\n```\n',
   'format.math': '公式块',
   'format.divider': '分隔线',
   'format.typography': '清理排版',
@@ -295,6 +294,7 @@ const zh = {
 
   'diagram.plantumlFailed': 'PlantUML 渲染失败',
   'diagram.failed': '图表渲染失败',
+  'diagram.mermaidEmpty': '在代码块中填写 Mermaid 图表，例如 graph LR',
 
   'time.justNow': '刚刚',
 } as const;
@@ -442,7 +442,6 @@ const en: Record<MessageKey, string> = {
   'format.todo': 'Task',
   'format.table': 'Table',
   'format.mermaid': 'Flowchart',
-  'format.mermaidContent': '```mermaid\n\n```\n',
   'format.math': 'Math block',
   'format.divider': 'Divider',
   'format.typography': 'Clean typography',
@@ -596,6 +595,7 @@ const en: Record<MessageKey, string> = {
 
   'diagram.plantumlFailed': 'PlantUML rendering failed',
   'diagram.failed': 'Diagram rendering failed',
+  'diagram.mermaidEmpty': 'Add a Mermaid diagram in the block, e.g. graph LR',
 
   'time.justNow': 'just now',
 };

@@ -1012,8 +1012,14 @@ export function EditorPane({
           <FormatButton
             title={t('format.mermaid')}
             onClick={() => {
-              const template = t('format.mermaidContent');
-              editorRef.current?.insertTemplate(template, template.indexOf('\n') + 1);
+              const template = t('slash.mermaidContent');
+              const labelStart = template.indexOf('[') + 1;
+              const labelEnd = template.indexOf(']', labelStart);
+              editorRef.current?.insertTemplate(
+                template,
+                labelStart,
+                Math.max(0, labelEnd - labelStart),
+              );
             }}
           >
             <Workflow size={15} />
